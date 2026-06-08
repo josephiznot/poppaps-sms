@@ -1,0 +1,198 @@
+# Requirements — Poppa P's Poker Night SMS
+
+- **Status:** Consolidated draft for build (supersedes the 2026-06-08 hashing draft)
+- **Date:** 2026-06-08
+- **Companion ADRs:** 0001 (platform), 0002 (data model & points), 0003
+  (*superseded*), 0004 (rewards & attendance), 0005 (interaction channels).
+
+This is the consolidated spec after the design conversation that (a) split the
+system into **SMS for players + a web app for admin + a public leaderboard**,
+(b) collapsed Subscriber/Player into **Members**, (c) made **attendance
+host-marked** (no player self-check-in), and (d) resolved the earlier open
+decisions. §6 records those resolutions; §7 lists what's still genuinely open.
+
+---
+
+## 1. Scope & actors
+
+**In scope:** SMS game-night reminders + opt-in/out/HELP; member identity captured
+at opt-in; points tracking across an ongoing season; a host-initiated "Special
+Players" tournament that snapshots the top 8, invites them, and resets the season;
+host-marked attendance feeding attendance-based promos; an **admin web app**; and
+a **public standings page**.
+
+**Out of scope:** POS / loyalty integration (ADR-0004); prize *inventory*
+management (only earned-vs-redeemed is tracked — §2.5); player self-check-in
+(rejected, ADR-0005 §5); multi-host / multi-venue (future).
+
+**Actors:**
+
+- **Member (player)** — opts in by texting JOIN in person at the lounge; receives
+  reminders, tournament invites, and promos; appears on the public board. Has **no
+  admin abilities** over any channel.
+- **Host** — the single operator. Uses the **admin web app** for everything:
+  schedule games, post-game winners + attendance, standings, run tournament, tidy
+  roster, mark promos redeemed. Authenticated via Cloudflare Access.
+- **System** — one Cloudflare Worker + D1 + Cron (ADR-0001): Twilio webhook (`/sms`),
+  admin app (`/admin/*`, behind Access), public page (`/`), and the Cron reminder.
+
+**North star (non-negotiable):** *minimal host effort.* Compliance framing
+("game-night reminders," cigars only, no cash) is load-bearing and must not
+regress.
+
+---
+
+## 2. Functional requirements
+
+### 2.1 Reminders & player SMS (player channel only)
+- FR-R1. Players opt in via JOIN; opt out via STOP/aliases; HELP returns program
+  info. Carrier-reserved keywords are never repurposed.
+- FR-R2. A game-night reminder goes out before each scheduled game, in
+  America/Chicago, framed as a reminder (not gambling).
+- FR-R3. Cadence is biweekly (anchor + 14-day interval). Auto-generation of the
+  recurring schedule is roadmap, not required for v1 (host can schedule each game).
+- FR-R4. **SMS carries no admin commands.** Inbound is only the player intents
+  above plus the JOIN name-capture reply (FR-M2). (ADR-0005 supersedes ADR-0003.)
+
+### 2.2 Membership & opt-in
+- FR-M1. **Members are keyed by phone**; one entity (Subscriber + Player collapsed,
+  ADR-0002). Opt-in is the tracking boundary — not opted-in means not in the system.
+- FR-M2. **Name capture at JOIN:** after JOIN, the system replies asking for the
+  member's **first name + last initial**; the reply is stored as `displayName`.
+- FR-M3. The host can **edit/dedupe display names** on the admin Roster screen
+  (they appear publicly, so quality matters).
+- FR-M4. **Consent disclosure** (opt-in page + JOIN/confirmation copy) must state
+  that opting in means: reminders **and occasional promos**, results **tracked for
+  points**, and **first name + last initial may appear on a public standings page.**
+
+### 2.3 Points & seasons
+- FR-P1. Members accumulate points over an **ongoing season = since the last season
+  close** (not the calendar quarter).
+- FR-P2. Scoring, top 5 only: 1st=5, 2nd=4, 3rd=3, 4th=2, 5th=1; 6th+ = 0.
+- FR-P3. Each award is one **append-only** PointsLedger row (`memberPhone`,
+  `gameId`, `points`, `awardedAt`); corrections are compensating rows, never edits.
+- FR-P4. Standings = `SUM(points) WHERE awardedAt > lastSeasonClose GROUP BY
+  memberPhone ORDER BY total DESC`, with a defined tie-break (FR-T4).
+
+### 2.4 Special Players tournament
+- FR-T1. **Host-initiated**, ~4×/yr, **never auto-scheduled**. The admin app
+  surfaces the top 8 on demand.
+- FR-T2. **Run-tournament sequence (this order):** (1) host schedules the
+  tournament game; (2) system **snapshots the top 8** of the closing season; (3)
+  sends invites to those 8; (4) **opens a new season** (records the close
+  boundary). Invites use pre-reset standings.
+- FR-T3. The reset is **logical** (a recorded season-close event), never a delete;
+  all history stays queryable.
+- FR-T4. **Ties at the 8th seat** are resolved by the **host on the Run-tournament
+  screen** (system shows the tie; host picks) — never an arbitrary `LIMIT 8`.
+- FR-T5. The tournament game **does not award points** (decided 2026-06-08) — a
+  one-off championship; the new season starts clean at the next regular game.
+- FR-T6. Invite copy may mention **more generous prizes**; prize amounts are a
+  lounge decision (not software, §2.5 / D6).
+
+### 2.5 Attendance & rewards
+- FR-W1. **Attendance is host-marked** on the post-game screen (tap who attended),
+  one append-only Attendance row per member per game. **No player self-check-in.**
+- FR-W2. Reward rules are **data-driven** (`RewardRules`: e.g. `everyNVisits`,
+  `rewardText`, `active`) evaluated against the attendance ledger.
+- FR-W3. When a rule fires, the member is **texted the promo** and an
+  `AwardedRewards` row records it (so it fires once per threshold crossing).
+- FR-W4. The admin Roster shows earned promos with a **"redeemed" checkbox** the
+  host taps when honored in person. No POS; `AwardedRewards` is the system of record.
+- FR-W5. The concrete reward rule set (the values of X, the promos) is **not yet
+  finalized** — more requirements expected (ADR-0004 is Proposed).
+
+### 2.6 Admin web app (behind Cloudflare Access)
+- FR-AD1. **Schedule game** — regular or tournament; date/time/location via native
+  pickers; **accepts past dates** for season backfill (FR-B1).
+- FR-AD2. **Post-game** — for a game: tap attendance (FR-W1) and tap/order the top
+  5 (FR-P2), committed together.
+- FR-AD3. **Standings** — current season.
+- FR-AD4. **Run tournament** — FR-T2 sequence, including the tie-break (FR-T4).
+- FR-AD5. **Roster** — edit display names (FR-M3), mark promos redeemed (FR-W4).
+- FR-AD6. All admin routes require Cloudflare Access auth; no admin action is
+  reachable without it.
+
+### 2.7 Public standings page (no login)
+- FR-PUB1. Read-only **current-season standings** + a brief **history of past game
+  winners / season champions**.
+- FR-PUB2. **Privacy:** show **first name + last initial only**; never fuller PII,
+  never phone numbers (FR-M4 discloses this).
+- FR-PUB3. The page URL may be shared in reminder texts.
+
+### 2.8 Backfill
+- FR-B1. The host can enter **completed past games** (FR-AD1 past dates + FR-AD2
+  winners/attendance); timestamped ledger rows sort correctly so standings compute
+  as if entered live.
+
+---
+
+## 3. Non-functional requirements
+
+- NFR-1. **Minimal host effort.** Recurring host work = one ~minute post-game
+  screen (attendance + winners) per biweekly game; scheduling and tournaments are
+  point-and-click. No structured authoring over SMS.
+- NFR-2. **Compliance & privacy.** Player copy stays "reminders + promos," cigars,
+  no cash. Public board shows minimized names with disclosed consent (FR-M4).
+- NFR-3. **Security/auth.** Admin is gated by **Cloudflare Access** (no secrets in
+  code, no spoofable-caller-ID risk because admin isn't on SMS). Twilio inbound
+  **signature validation stays mandatory** (Web Crypto, ADR-0001).
+- NFR-4. **Auditability.** Points, attendance, season-close, and awarded-rewards
+  are append-only; nothing is destructively edited.
+- NFR-5. **Operational simplicity.** One Worker + D1 + Cron serves all three
+  surfaces (ADR-0001/0005); no extra services.
+
+---
+
+## 4. Data model (D1) — see ADR-0002/0004
+
+- **Members** — `phone` (PK), `displayName`, `status`, opt-in/out timestamps,
+  `source`, `createdAt`.
+- **Games** — `id`, `startsAt`, `location`, `isTournament`, `reminderSent`,
+  `createdAt` (+ optional `buyIn`/`description`).
+- **PointsLedger** — append-only: `memberPhone`, `gameId`, `points`, `awardedAt`.
+- **Attendance** — append-only: `memberPhone`, `gameId`, `timestamp` (host-marked).
+- **Seasons** — append-only season-close log: `id`, `closedAt`, `snapshot` (top-8
+  of the closing season). Current season = everything after `MAX(closedAt)`.
+- **RewardRules** — `id`, `everyNVisits`, `rewardText`, `active`.
+- **AwardedRewards** — `memberPhone`, `ruleId`, `awardedAt`, `redeemedAt?`.
+
+## 5. Interaction surfaces (ADR-0005)
+
+- **SMS (Twilio `/sms` webhook)** — players only: reminders/invites/promos out;
+  JOIN/STOP/HELP + JOIN name reply in.
+- **Admin web (`/admin/*`, Cloudflare Access)** — all host actions (§2.6).
+- **Public web (`/`)** — read-only standings + history (§2.7).
+
+---
+
+## 6. Resolved decisions (were the open decisions)
+
+- **D1 — Admin interface → RESOLVED: web app for all admin; SMS players-only.** The
+  attendance + public-board requirements pushed past a hybrid to a full web admin.
+- **D2 — Admin auth → RESOLVED: Cloudflare Access** on `/admin/*`. No SMS admin, so
+  the phone-allowlist + in-message PIN are dropped.
+- **D3 — Player reference for winner entry → DISSOLVED.** Winners are tapped by name
+  in the web UI; no SMS IDs/handles/disambiguation needed.
+- **D4 — Tie-break at 8th → RESOLVED: host breaks the tie** on the Run-tournament
+  screen (host is already in the loop). Never arbitrary truncation.
+- **D5 — Tournament game awards points? → RESOLVED: No.** One-off championship; the
+  new season starts clean at the next regular game.
+- **D6 — Prize tracking → RESOLVED: light only.** `AwardedRewards` tracks
+  earned + redeemed (a checkbox); no prize inventory, no POS.
+
+## 7. Still open (small)
+
+- **Reward rule specifics (FR-W5).** The actual thresholds and promos ("every X
+  visits → …") are pending more requirements from the lounge manager. ADR-0004
+  stays *Proposed* until then; the data model already accommodates it.
+
+## 8. Assumptions
+
+- "Quarterly" ≈ 4×/yr but the real trigger is the host running it; the scoring
+  window is **since last season close**.
+- The tournament invite is a **targeted broadcast to the snapshotted 8**, reusing
+  the player SMS sender.
+- The admin and public pages are served by the **same Worker** (ADR-0001) — not a
+  separate service.
+- Members self-report a first name + last initial at JOIN; the host curates them.
