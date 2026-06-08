@@ -61,8 +61,9 @@ game on an off week.
   Cloudflare Access optional in prod): schedule games, post-game (winners +
   attendance in one flow), standings, run-tournament, roster. Replaces the old SMS
   command router + phone-allowlist (ADR-0003, superseded).
-- **Public = read-only standings page** (no login): current season + past winners,
-  **first name + last initial only** (privacy; disclosed at opt-in).
+- **Public = read-only standings page** (no login) at `/`, plus the **privacy
+  policy** (`/privacy`) and **program terms** (`/terms`) served by the Worker (on
+  Cloudflare, not GitHub Pages). Names shown as **first name + last initial only**.
 
 ## Roadmap / status
 

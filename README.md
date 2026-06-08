@@ -118,8 +118,10 @@ setting and into `PUBLIC_BASE_URL`.
 - SMS is **players-only**: reminders, promos, invites out; JOIN/STOP/HELP in.
   STOP/HELP are handled; copy is framed as **game reminders + promos**, not
   gambling (cigars, no cash) — carriers scrutinize gambling content.
-- The opt-in disclosure ([`docs/index.md`](docs/index.md)) covers reminders,
-  promos, points tracking, and public display of first name + last initial.
+- The program **terms** and **privacy policy** are served live by the Worker at
+  **`/terms`** and **`/privacy`** (on Cloudflare, no GitHub Pages). They disclose
+  reminders, promos, points tracking, and public display of first name + last
+  initial. (`docs/index.md` / `docs/privacy.md` are the editable source.)
 - The public page shows **first name + last initial only** — never fuller PII.
 
 ## Project structure

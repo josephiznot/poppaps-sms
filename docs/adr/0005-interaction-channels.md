@@ -59,6 +59,8 @@ convenient; it does not replace the password gate.
 ### 3. Public — read-only standings page (same Worker, no login)
 - Current **season standings** and a brief **history of past game winners / season
   champions**.
+- The **privacy policy** (`/privacy`) and **program terms** (`/terms`) are also
+  served by the Worker — policies live on Cloudflare, **not** GitHub Pages.
 - **Privacy:** display **first name + last initial only** (e.g. "Mike R."). Never
   full names beyond that, never phone numbers. The opt-in disclosure (§4) must say
   a member's first name + last initial may appear here.
