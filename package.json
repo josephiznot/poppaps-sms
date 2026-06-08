@@ -1,0 +1,30 @@
+{
+  "name": "poker-sms",
+  "version": "0.2.0",
+  "description": "Poppa P's Poker Night — SMS reminders + points/rewards on Cloudflare Workers + D1",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:schema:local": "wrangler d1 execute poker-sms --local --file=./schema.sql",
+    "db:seed:local": "wrangler d1 execute poker-sms --local --file=./seed.sql",
+    "db:schema:remote": "wrangler d1 execute poker-sms --remote --file=./schema.sql",
+    "db:seed:remote": "wrangler d1 execute poker-sms --remote --file=./seed.sql"
+  },
+  "dependencies": {
+    "hono": "^4.6.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240925.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.0",
+    "wrangler": "^3.78.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

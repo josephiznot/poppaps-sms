@@ -13,15 +13,15 @@ page**, all built for **minimal effort**.
 
 ## Current status — read before changing anything
 
-- The repo is an **AWS SAM scaffold** (Lambda + API Gateway + DynamoDB,
-  Node.js/TypeScript, Twilio SDK). It works as a reminder service on paper but was
-  **never deployed**: no AWS resources exist, no AWS keys were ever provided, and
-  the files are only git-**staged**, not committed. **Zero switching cost.**
-- **Decided direction: rebuild on Cloudflare Workers + D1 (managed SQLite) + Cron
-  Triggers** — *not yet implemented*. The AWS code is reference material to port
-  from, not the deploy target. See **[docs/adr/0001-cloud-platform.md](docs/adr/0001-cloud-platform.md)**.
-- All architectural decisions live in **[docs/adr/](docs/adr/)** — read these
-  before designing features (platform, data model, command router, rewards).
+- **Implemented on Cloudflare Workers + D1 + Cron** (Hono). One Worker serves
+  `POST /sms` (Twilio webhook), `/admin/*` (host web app, password-gated), `GET /`
+  (public standings), plus an hourly reminder cron. The previous AWS SAM scaffold
+  has been **removed**.
+- **Not deployed yet** — needs a Cloudflare account + D1 + Twilio secrets (see
+  README "Setup & deploy"). Verified locally: typecheck, vitest, and a
+  `wrangler dev` smoke test of the SMS, admin, and public flows.
+- Architecture decisions live in **[docs/adr/](docs/adr/)**; the consolidated spec
+  is **[docs/requirements.md](docs/requirements.md)** — read before changing features.
 
 ## Domain model (target, ledger-oriented — see ADR-0002/0004)
 
@@ -57,69 +57,65 @@ game on an off week.
 
 - **SMS = players only.** Out: reminders, tournament invites, promos. In:
   JOIN / STOP / HELP + the JOIN name-capture reply. **No admin over SMS.**
-- **Admin = web app** on the same Worker, behind **Cloudflare Access**: schedule
-  games, post-game (winners + attendance in one flow), standings, run-tournament,
-  roster. Replaces the old SMS command router + phone-allowlist (ADR-0003, superseded).
+- **Admin = web app** on the same Worker, **password-gated** (`ADMIN_PASSWORD`;
+  Cloudflare Access optional in prod): schedule games, post-game (winners +
+  attendance in one flow), standings, run-tournament, roster. Replaces the old SMS
+  command router + phone-allowlist (ADR-0003, superseded).
 - **Public = read-only standings page** (no login): current season + past winners,
   **first name + last initial only** (privacy; disclosed at opt-in).
 
-## Roadmap
+## Roadmap / status
 
-1. **Game-night reminders** — scaffolded (on AWS; to be ported to Workers).
-2. **Members + opt-in name capture** — JOIN captures consent + display name.
-3. **Points tracking** — host enters winners on the **admin web app**; append-only
-   points ledger; public standings page. (ADR-0002, ADR-0005)
-4. **Quarterly special tournament** — *host-initiated* (4×/yr); on-demand top-8 →
-   invite → logical season reset. (ADR-0002)
-5. **Rewards / attendance** — host-marked attendance → data-driven promos via SMS;
-   reward rule specifics still forming. (ADR-0004)
-- **Recurring schedule** (anchor + 14-day interval auto-generating games) is a
-  natural near-term feature — **not built yet**.
+1. **Game-night reminders** — ✅ built (Workers cron + Twilio).
+2. **Members + opt-in name capture** — ✅ built (JOIN → name reply → display name).
+3. **Points tracking** — ✅ built (admin post-game entry; append-only ledger;
+   public standings). (ADR-0002, ADR-0005)
+4. **Special Players tournament** — ✅ built (admin: top-8 → invite → logical
+   season reset). (ADR-0002)
+5. **Rewards / attendance** — ✅ mechanism built (host-marked attendance →
+   data-driven promos via SMS); concrete reward rules still forming —
+   `seed.sql` has a placeholder. (ADR-0004)
+- **Recurring schedule** (anchor + 14-day interval auto-generating games) — **not
+  built**; the host schedules each game.
 
-## Repo structure (current — AWS scaffold)
+## Repo structure
 
 ```
-template.yaml            SAM infra: Lambdas, API, DynamoDB, hourly schedule, IAM
-samconfig.toml           Deploy settings
+wrangler.toml            Worker config: D1 binding, cron, vars
+schema.sql / seed.sql    D1 tables + example reward rule
 src/
-  handlers/
-    inboundSms.ts        Twilio webhook (JOIN/STOP/HELP) — becomes a command router
-    broadcast.ts         Ad-hoc broadcast (invoked, not public)
-    sendGameReminders.ts Hourly scheduled reminders
+  index.ts               Worker entry: route mounting + scheduled (cron) handler
+  types.ts               Env bindings + domain types
+  routes/
+    sms.ts               Twilio webhook (player intents + name capture)
+    admin.ts             Host web app (login, games, post-game, tournament, roster)
+    public.ts            Public standings page
   lib/
-    config.ts            Env + Twilio token from SSM (cached)
-    dynamo.ts            DynamoDB repositories  (-> replace with D1)
-    twilio.ts            Client, sender, signature validation, TwiML
-    broadcaster.ts       Send-to-all-subscribers
-    messages.ts          Keyword parsing (parseIntent) + message copy
-    phone.ts             E.164 normalization
-  types.ts               Subscriber, Game, BroadcastResult
-scripts/                 Local admin CLIs (tsx): add-game, list-games,
-                         list-subscribers, broadcast
-docs/                    Opt-in page + privacy (GitHub Pages); adr/ = decisions
-events/                  Sample webhook event for local invoke
-tests/                   Vitest unit tests (messages, phone)
+    db.ts                All D1 queries
+    twilio.ts            Send (fetch) + signature validation (Web Crypto) + TwiML
+    messages.ts          Keyword parsing (parseIntent) + SMS copy
+    jobs.ts              Reminders cron + reward engine
+    points.ts            Scoring (pure)
+    phone.ts             E.164 (pure)
+    auth.ts              Admin session cookie
+    html.ts              Server-rendered HTML layout
+docs/                    requirements.md + ADRs + opt-in/privacy pages
+tests/                   Vitest unit tests (messages, phone, points)
 ```
 
-## Key commands (from package.json — current AWS scaffold)
+## Key commands
 
 | Command | What it does |
 | --- | --- |
 | `npm install` | Install deps |
+| `npm run dev` | Local dev (Miniflare + local D1) at :8787 |
+| `npm run deploy` | `wrangler deploy` |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | Vitest (keyword parsing + phone normalization) |
-| `npm run test:watch` | Vitest watch |
-| `npm run build` | `sam build` |
-| `npm run deploy` / `deploy:guided` | `sam deploy` (do NOT run without confirmation) |
-| `npm run validate` | `sam validate --lint` |
-| `npm run local:api` | `sam local start-api` (signature check off) |
-| `npm run invoke:inbound` | Run webhook handler against `events/inbound-sms.json` |
-| `npm run game:add -- --when "2026-06-07 19:00" --location "..."` | Schedule a game |
-| `npm run games:list` / `subscribers:list` | List games / subscribers |
-| `npm run broadcast -- --message "..." [--dry-run]` | Ad-hoc blast (dry-run first) |
+| `npm test` | Vitest (messages, phone, points) |
+| `npm run db:schema:local` / `:remote` | Apply `schema.sql` |
+| `npm run db:seed:local` / `:remote` | Apply `seed.sql` |
 
-> Note: these are SAM/AWS commands. When the Workers rebuild lands, expect
-> `wrangler dev` / `wrangler deploy` / `wrangler d1 ...` to replace them.
+> Full setup/deploy (D1 create, secrets, Twilio webhook) is in the README.
 
 ## Conventions & constraints
 
@@ -129,12 +125,13 @@ tests/                   Vitest unit tests (messages, phone)
   Keep `messages.ts` copy and any Twilio campaign description matching this.
 - **Opt-out/HELP are mandatory and built in.** Never repurpose reserved carrier
   keywords (STOP/HELP/etc.); player keywords win over admin commands.
-- **Validate the Twilio signature** on every inbound webhook (`X-Twilio-Signature`).
-  In the Workers port, do the HMAC-SHA1 check with Web Crypto (no Twilio SDK).
-- **Secrets never in code.** Twilio Auth Token via SSM today; via
-  `wrangler secret put` after the port. Don't commit tokens or `.env`.
-- **Admin is a web app behind Cloudflare Access** (not SMS, not a phone allowlist).
-  SMS is players-only. (ADR-0005; ADR-0003 superseded.)
+- **Validate the Twilio signature** on every inbound webhook (`X-Twilio-Signature`)
+  — HMAC-SHA1 via Web Crypto in `lib/twilio.ts` (toggle with
+  `VALIDATE_TWILIO_SIGNATURE`).
+- **Secrets never in code.** Twilio creds + `ADMIN_PASSWORD` via
+  `wrangler secret put` (local: `.dev.vars`, git-ignored). Don't commit secrets.
+- **Admin is a password-gated web app** (`lib/auth.ts`), optionally fronted by
+  Cloudflare Access in production. SMS is players-only. (ADR-0005; ADR-0003 superseded.)
 - **Privacy:** the public board shows first name + last initial only; opt-in copy
   discloses reminders + promos, points tracking, and public name display.
 - **Time zone is America/Chicago (Central Time)** for scheduling, reminder

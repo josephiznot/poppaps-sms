@@ -1,0 +1,10 @@
+# Copy to `.dev.vars` for local `wrangler dev`. This file is git-ignored.
+# In production these are set with `wrangler secret put <NAME>` instead.
+
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TWILIO_AUTH_TOKEN=your_twilio_auth_token
+ADMIN_PASSWORD=choose-a-strong-password
+
+# Turn signature checking off locally so you can hit /sms with curl/Postman.
+# Keep it "true" in production (it's "true" by default via wrangler.toml).
+VALIDATE_TWILIO_SIGNATURE=false

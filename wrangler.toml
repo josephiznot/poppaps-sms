@@ -1,0 +1,27 @@
+name = "poker-sms"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+workers_dev = true
+
+# Hourly check that sends game-night reminders (and is cheap when idle).
+[triggers]
+crons = ["0 * * * *"]
+
+# Non-secret config. Secrets (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN,
+# ADMIN_PASSWORD) are set with `wrangler secret put` — never put them here.
+[vars]
+TWILIO_FROM_NUMBER = "+16156951691"
+PROGRAM_NAME = "Poppa P's Poker Night"
+SUPPORT_CONTACT = "Ask the host at Poppa P's"
+TIMEZONE = "America/Chicago"
+REMINDER_LEAD_HOURS = "24"
+VALIDATE_TWILIO_SIGNATURE = "true"
+# Set this to your deployed Worker URL after the first deploy so SMS can link
+# to the public standings page, e.g. https://poker-sms.<subdomain>.workers.dev
+PUBLIC_BASE_URL = "https://poker-sms.poppaps.workers.dev"
+
+# Created with `wrangler d1 create poker-sms` — paste the printed database_id here.
+[[d1_databases]]
+binding = "DB"
+database_name = "poker-sms"
+database_id = "73fdc580-6599-4b16-9c12-861a6d046c1c"

@@ -6,7 +6,7 @@
 > **⚠️ Superseded.** This ADR proposed running admin actions (winner entry,
 > scheduling, run-tournament) *over SMS* via a command router with phone-allowlist
 > auth. That approach was replaced by **ADR-0005**: SMS is now **players-only**,
-> and all admin moved to an **authenticated web app** (Cloudflare Access). The
+> and all admin moved to an **authenticated web app** (password-gated). The
 > content below is kept as the decision trail — **do not build from it.**
 
 ## Context

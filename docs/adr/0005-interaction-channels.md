@@ -50,9 +50,11 @@ A small web UI, **not** public, gating every admin action:
   sends invites, and closes the season (the snapshot→invite→reset of ADR-0002).
 - **Roster** — view/tidy member display names; mark earned promos **redeemed**.
 
-**Auth:** put the admin routes behind **Cloudflare Access** (Zero-Trust login via
-the host's Google/email) — no password handling in code. A shared-secret/magic
-link is the fallback if Access isn't used.
+**Auth (as shipped):** a **password login → signed session cookie** (the
+`ADMIN_PASSWORD` secret; 30-day cookie; `src/lib/auth.ts`), so admin works
+immediately with no external setup. **Cloudflare Access** (Zero-Trust SSO on
+`/admin/*`) is the recommended production hardening layered on top — add it when
+convenient; it does not replace the password gate.
 
 ### 3. Public — read-only standings page (same Worker, no login)
 - Current **season standings** and a brief **history of past game winners / season
@@ -93,7 +95,7 @@ this scale.
   Inbound SMS stays the small player-intent switch that already exists, plus the
   JOIN name reply.
 - The Worker now serves three route groups: `/sms` (Twilio webhook), `/admin/*`
-  (behind Cloudflare Access), and `/` public standings — plus the Cron reminder.
+  (password-gated), and `/` public standings — plus the Cron reminder.
 - **Anti-cheat is structural, not a feature.** No self-check-in means no cheat
   surface and no anti-abuse code to maintain.
 - **A public surface adds a privacy obligation** — minimized names + an explicit

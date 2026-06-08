@@ -32,7 +32,8 @@ management (only earned-vs-redeemed is tracked — §2.5); player self-check-in
   admin abilities** over any channel.
 - **Host** — the single operator. Uses the **admin web app** for everything:
   schedule games, post-game winners + attendance, standings, run tournament, tidy
-  roster, mark promos redeemed. Authenticated via Cloudflare Access.
+  roster, mark promos redeemed. Authenticated via an admin password (Cloudflare
+  Access optional in production).
 - **System** — one Cloudflare Worker + D1 + Cron (ADR-0001): Twilio webhook (`/sms`),
   admin app (`/admin/*`, behind Access), public page (`/`), and the Cron reminder.
 
@@ -102,7 +103,7 @@ regress.
 - FR-W5. The concrete reward rule set (the values of X, the promos) is **not yet
   finalized** — more requirements expected (ADR-0004 is Proposed).
 
-### 2.6 Admin web app (behind Cloudflare Access)
+### 2.6 Admin web app (password-gated)
 - FR-AD1. **Schedule game** — regular or tournament; date/time/location via native
   pickers; **accepts past dates** for season backfill (FR-B1).
 - FR-AD2. **Post-game** — for a game: tap attendance (FR-W1) and tap/order the top
@@ -110,8 +111,9 @@ regress.
 - FR-AD3. **Standings** — current season.
 - FR-AD4. **Run tournament** — FR-T2 sequence, including the tie-break (FR-T4).
 - FR-AD5. **Roster** — edit display names (FR-M3), mark promos redeemed (FR-W4).
-- FR-AD6. All admin routes require Cloudflare Access auth; no admin action is
-  reachable without it.
+- FR-AD6. All admin routes require auth — a password login → signed session cookie
+  (`ADMIN_PASSWORD`); no admin action is reachable without it. Cloudflare Access is
+  optional production hardening on top.
 
 ### 2.7 Public standings page (no login)
 - FR-PUB1. Read-only **current-season standings** + a brief **history of past game
@@ -134,9 +136,10 @@ regress.
   point-and-click. No structured authoring over SMS.
 - NFR-2. **Compliance & privacy.** Player copy stays "reminders + promos," cigars,
   no cash. Public board shows minimized names with disclosed consent (FR-M4).
-- NFR-3. **Security/auth.** Admin is gated by **Cloudflare Access** (no secrets in
-  code, no spoofable-caller-ID risk because admin isn't on SMS). Twilio inbound
-  **signature validation stays mandatory** (Web Crypto, ADR-0001).
+- NFR-3. **Security/auth.** Admin is gated by a **password login** (`ADMIN_PASSWORD`
+  secret; signed 30-day session cookie), with **Cloudflare Access** as optional
+  production hardening. No spoofable-caller-ID risk because admin isn't on SMS.
+  Twilio inbound **signature validation stays mandatory** (Web Crypto, ADR-0001).
 - NFR-4. **Auditability.** Points, attendance, season-close, and awarded-rewards
   are append-only; nothing is destructively edited.
 - NFR-5. **Operational simplicity.** One Worker + D1 + Cron serves all three
@@ -161,7 +164,7 @@ regress.
 
 - **SMS (Twilio `/sms` webhook)** — players only: reminders/invites/promos out;
   JOIN/STOP/HELP + JOIN name reply in.
-- **Admin web (`/admin/*`, Cloudflare Access)** — all host actions (§2.6).
+- **Admin web (`/admin/*`, password-gated)** — all host actions (§2.6).
 - **Public web (`/`)** — read-only standings + history (§2.7).
 
 ---
@@ -170,8 +173,9 @@ regress.
 
 - **D1 — Admin interface → RESOLVED: web app for all admin; SMS players-only.** The
   attendance + public-board requirements pushed past a hybrid to a full web admin.
-- **D2 — Admin auth → RESOLVED: Cloudflare Access** on `/admin/*`. No SMS admin, so
-  the phone-allowlist + in-message PIN are dropped.
+- **D2 — Admin auth → RESOLVED: password login** (`ADMIN_PASSWORD`), with Cloudflare
+  Access optional in production. No SMS admin, so the phone-allowlist + in-message
+  PIN are dropped.
 - **D3 — Player reference for winner entry → DISSOLVED.** Winners are tapped by name
   in the web UI; no SMS IDs/handles/disambiguation needed.
 - **D4 — Tie-break at 8th → RESOLVED: host breaks the tie** on the Run-tournament
