@@ -59,7 +59,8 @@ game on an off week.
   JOIN / STOP / HELP + the JOIN name-capture reply. **No admin over SMS.**
 - **Admin = web app** on the same Worker, **password-gated** (`ADMIN_PASSWORD`;
   Cloudflare Access optional in prod): schedule games, post-game (winners +
-  attendance in one flow), standings, run-tournament, roster. Replaces the old SMS
+  attendance; re-openable to edit a past game), standings, run-tournament, roster
+  (names, games-attended counts, promos). Replaces the old SMS
   command router + phone-allowlist (ADR-0003, superseded).
 - **Public** (no login, all on the Worker — not GitHub Pages): standings at `/`,
   **game rules + blind structure** at `/rules`, **program terms** at `/terms`,

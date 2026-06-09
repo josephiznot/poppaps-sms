@@ -131,16 +131,6 @@ admin.get('/games/:id', async (c) => {
   if (!game) return layout('Not found', `<p>Game not found.</p>`, adminNav);
 
   const when = esc(formatWhen(game.starts_at, c.env.TIMEZONE));
-  if (await db.gameHasResults(c.env.DB, game.id)) {
-    const attendees = await db.attendeesForGame(c.env.DB, game.id);
-    return layout(
-      'Results recorded',
-      `<h1>${when}</h1><p class="ok">✅ Results already recorded.</p>` +
-        `<p class="muted">${attendees.length} attendee(s). See <a href="/admin/standings">standings</a>.</p>`,
-      adminNav,
-    );
-  }
-
   const members = await db.listMembers(c.env.DB);
   if (members.length === 0) {
     return layout(
@@ -150,38 +140,52 @@ admin.get('/games/:id', async (c) => {
     );
   }
 
+  // Prefill from any existing result so this screen also edits past games.
+  const existing = await db.pointsForGame(c.env.DB, game.id);
+  const placePhone: Record<number, string> = {};
+  for (const row of existing) placePhone[6 - row.points] = row.member_phone; // 5pts→1st … 1pt→5th
+  const attended = new Set(await db.attendeesForGame(c.env.DB, game.id));
+  const editing = existing.length > 0;
+
   const options = (sel = '') =>
     `<option value="">—</option>` +
     members.map((m) => `<option value="${esc(m.phone)}"${m.phone === sel ? ' selected' : ''}>${esc(m.display_name ?? m.phone)}</option>`).join('');
 
   const winnerSelects = [1, 2, 3, 4, 5]
-    .map((p) => `<label>${ordinal(p)} place<select name="place${p}">${options()}</select></label>`)
+    .map((p) => `<label>${ordinal(p)} place<select name="place${p}">${options(placePhone[p] ?? '')}</select></label>`)
     .join('');
 
   const attendanceRows = members
     .map(
       (m) =>
-        `<label class="row"><input type="checkbox" name="attend" value="${esc(m.phone)}"> ${esc(m.display_name ?? m.phone)}</label>`,
+        `<label class="row"><input type="checkbox" name="attend" value="${esc(m.phone)}"${attended.has(m.phone) ? ' checked' : ''}> ${esc(m.display_name ?? m.phone)}</label>`,
     )
     .join('');
 
+  const title = editing ? 'Edit results' : 'Post-game';
+  const note = editing
+    ? `<p class="muted">Re-saving <strong>replaces</strong> this game's recorded result (winners + attendance).</p>`
+    : '';
   const body =
-    `<h1>Post-game — ${when}</h1>` +
+    `<h1>${title} — ${when}</h1>${note}` +
     `<form class="stack" method="post" action="/admin/games/${esc(game.id)}/result">` +
     `<h2>Top 5 (5·4·3·2·1 pts)</h2>${winnerSelects}` +
     `<h2>Who attended?</h2><p class="muted">Winners count automatically.</p>${attendanceRows}` +
     `<button class="primary" type="submit">Save results</button></form>`;
 
-  return layout('Post-game', body, adminNav);
+  return layout(title, body, adminNav);
 });
 
 admin.post('/games/:id/result', async (c) => {
   const game = await db.getGame(c.env.DB, c.req.param('id'));
   if (!game) return c.redirect('/admin/games');
-  if (await db.gameHasResults(c.env.DB, game.id)) return c.redirect('/admin/standings');
 
   const f = new URLSearchParams(await c.req.text());
   const now = new Date().toISOString();
+
+  // Re-entry replaces this game's result wholesale, so edits are clean (ADR-0002).
+  await db.clearGameResults(c.env.DB, game.id);
+  await db.clearAttendanceForGame(c.env.DB, game.id);
 
   // Ordered winners (dedup, keep first occurrence).
   const winners: string[] = [];
@@ -278,6 +282,7 @@ admin.post('/tournament/run', async (c) => {
 admin.get('/roster', async (c) => {
   const members = await db.listMembers(c.env.DB);
   const rewards = await db.listAwardedRewards(c.env.DB);
+  const visits = await db.attendanceCounts(c.env.DB);
 
   const memberRows = members.length
     ? members
@@ -286,6 +291,7 @@ admin.get('/roster', async (c) => {
             `<form class="row" method="post" action="/admin/roster/name">` +
             `<input type="hidden" name="phone" value="${esc(m.phone)}">` +
             `<input type="text" name="name" value="${esc(m.display_name ?? '')}" placeholder="First L" style="flex:1">` +
+            `<span class="pill" title="games attended">🎲 ${visits[m.phone] ?? 0}</span>` +
             `<span class="pill">${m.status === 'SUBSCRIBED' ? '✅' : '🚫'}</span>` +
             `<button type="submit">Save</button></form>`,
         )

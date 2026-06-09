@@ -115,9 +115,12 @@ and the **tournament game awards no points**. See `docs/requirements.md` §6.
 
 ## Consequences
 
-- **Auditability and corrections** are natural: the ledger is the source of
-  truth and never mutated, so a mis-entered result is fixed by appending a
-  correction, not by editing history.
+- **Auditability and corrections.** The append-only ledger is the source of truth
+  for standings. **Scoped exception:** the admin *edit* flow fixes a mis-entered
+  result by **re-entering it** — deleting and re-inserting that one `game_id`'s
+  points + attendance rows. For a single host correcting a same-night mistake this
+  is simpler and clearer than stacking compensating rows; the mutation is confined
+  to one game and everything else stays append-only.
 - **Aggregations are just queries.** Season standings and quarterly top-8 are SQL
   `GROUP BY` over the ledger — no counter maintenance, no schema churn when new
   report shapes appear. This is a concrete reason **D1/SQL fits better than the

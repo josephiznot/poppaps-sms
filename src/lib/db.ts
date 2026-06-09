@@ -213,6 +213,38 @@ export async function attendeesForGame(db: D1Database, gameId: string): Promise<
   return (r.results ?? []).map((x) => x.member_phone);
 }
 
+/** Per-member games-attended counts, as { phone: count }. */
+export async function attendanceCounts(db: D1Database): Promise<Record<string, number>> {
+  const r = await db
+    .prepare('SELECT member_phone, COUNT(*) AS n FROM attendance GROUP BY member_phone')
+    .all<{ member_phone: string; n: number }>();
+  const out: Record<string, number> = {};
+  for (const row of r.results ?? []) out[row.member_phone] = row.n;
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Editing a recorded game — re-entry replaces that game's result wholesale
+// (a deliberate, scoped exception to the append-only ledger; ADR-0002).
+// ---------------------------------------------------------------------------
+
+/** The points rows for one game (used to prefill the edit form). */
+export async function pointsForGame(db: D1Database, gameId: string): Promise<Array<{ member_phone: string; points: number }>> {
+  const r = await db
+    .prepare('SELECT member_phone, points FROM points_ledger WHERE game_id=? ORDER BY points DESC')
+    .bind(gameId)
+    .all<{ member_phone: string; points: number }>();
+  return r.results ?? [];
+}
+
+export async function clearGameResults(db: D1Database, gameId: string): Promise<void> {
+  await db.prepare('DELETE FROM points_ledger WHERE game_id=?').bind(gameId).run();
+}
+
+export async function clearAttendanceForGame(db: D1Database, gameId: string): Promise<void> {
+  await db.prepare('DELETE FROM attendance WHERE game_id=?').bind(gameId).run();
+}
+
 // ---------------------------------------------------------------------------
 // Seasons
 // ---------------------------------------------------------------------------

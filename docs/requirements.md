@@ -109,10 +109,12 @@ regress.
 - FR-AD1. **Schedule game** — regular or tournament; date/time/location via native
   pickers; **accepts past dates** for season backfill (FR-B1).
 - FR-AD2. **Post-game** — for a game: tap attendance (FR-W1) and tap/order the top
-  5 (FR-P2), committed together.
+  5 (FR-P2), committed together. Re-opening a recorded game **pre-fills** it; re-saving
+  **replaces** that game's result (edit/correct — ADR-0002 scoped exception).
 - FR-AD3. **Standings** — current season.
 - FR-AD4. **Run tournament** — FR-T2 sequence, including the tie-break (FR-T4).
-- FR-AD5. **Roster** — edit display names (FR-M3), mark promos redeemed (FR-W4).
+- FR-AD5. **Roster** — edit display names (FR-M3), mark promos redeemed (FR-W4),
+  and see each member's **games-attended count** (supports attendance rewards).
 - FR-AD6. All admin routes require auth — a password login → signed session cookie
   (`ADMIN_PASSWORD`); no admin action is reachable without it. Cloudflare Access is
   optional production hardening on top.
