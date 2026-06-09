@@ -189,7 +189,7 @@ admin.get('/games/:id', async (c) => {
     `<form class="stack" method="post" action="/admin/games/${esc(game.id)}/result">` +
     `<h2>Top 5 (5·4·3·2·1 pts)</h2>${winnerSelects}` +
     `<h2>Who attended?</h2><p class="muted">Winners count automatically.</p>${attendanceRows}` +
-    `<label class="row"><input type="checkbox" name="is_tournament" value="1"${game.is_tournament ? ' checked' : ''}> 🏆 Special Players tournament</label>` +
+    `<label class="row"><input type="checkbox" name="is_tournament" value="1"${game.is_tournament ? ' checked' : ''}> 🏆 Special Players tournament <span class="muted">(no season points)</span></label>` +
     `<button class="primary" type="submit">Save results</button></form>`;
 
   return layout(title, body, adminNav);
@@ -201,21 +201,22 @@ admin.post('/games/:id/result', async (c) => {
 
   const f = new URLSearchParams(await c.req.text());
   const now = new Date().toISOString();
+  const isTournament = f.get('is_tournament') === '1';
 
   // Re-entry replaces this game's result wholesale, so edits are clean (ADR-0002).
   await db.clearGameResults(c.env.DB, game.id);
   await db.clearAttendanceForGame(c.env.DB, game.id);
 
   // Award points by the ACTUAL place selected (place 1 = 5 pts … place 5 = 1 pt),
-  // NOT by how many slots were filled — so a lone 5th-place entry gets 1 point,
-  // not 5, and gaps are fine (handy before everyone has opted in). Dedup keeps a
-  // player's highest place if they're listed twice.
+  // NOT by how many slots were filled. **Special Players tournament games award NO
+  // season points** (D5) — winners still count as attendance but never touch the
+  // standings. Dedup keeps a player's highest place if listed twice.
   const winners: string[] = [];
   for (const p of [1, 2, 3, 4, 5]) {
     const phone = f.get(`place${p}`);
     if (phone && !winners.includes(phone)) {
       winners.push(phone);
-      await db.addPoints(c.env.DB, phone, game.id, pointsForPlace(p - 1), now);
+      if (!isTournament) await db.addPoints(c.env.DB, phone, game.id, pointsForPlace(p - 1), now);
     }
   }
 
@@ -223,7 +224,7 @@ admin.post('/games/:id/result', async (c) => {
   const attendees = new Set<string>([...f.getAll('attend'), ...winners]);
   for (const phone of attendees) await db.markAttendance(c.env.DB, phone, game.id, now);
 
-  await db.setGameTournament(c.env.DB, game.id, f.get('is_tournament') === '1');
+  await db.setGameTournament(c.env.DB, game.id, isTournament);
   await awardRewardsForAttendees(c.env, [...attendees], now);
   return c.redirect('/admin/standings');
 });
