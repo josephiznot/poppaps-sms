@@ -20,6 +20,18 @@ export const RECURRING = {
   horizonDays: 16,
 } as const;
 
+import type { Game } from '../types';
+
+/** Local dates (YYYY-MM-DD) already occupied by games — for one-game-per-day rules. */
+export function gameLocalDates(games: Game[], timeZone: string, includeCancelled = false): Set<string> {
+  const out = new Set<string>();
+  for (const g of games) {
+    if (!includeCancelled && g.cancelled) continue;
+    out.add(localDateInTz(new Date(g.starts_at), timeZone));
+  }
+  return out;
+}
+
 /** Local date (YYYY-MM-DD) in a time zone for a given instant. */
 export function localDateInTz(date: Date, timeZone: string): string {
   // en-CA formats as YYYY-MM-DD.

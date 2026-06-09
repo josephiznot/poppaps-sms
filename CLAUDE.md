@@ -58,7 +58,8 @@ game on an off week.
 - **SMS = players only.** Out: reminders, tournament invites, promos. In:
   JOIN / STOP / HELP + the JOIN name-capture reply. **No admin over SMS.**
 - **Admin = web app** on the same Worker, **password-gated** (`ADMIN_PASSWORD`;
-  Cloudflare Access optional in prod): schedule games, post-game (winners +
+  Cloudflare Access optional in prod): schedule games (one per day; Skip or Delete
+  — delete also removes that game's points + attendance), post-game (winners +
   attendance; re-openable to edit a past game), standings, run-tournament, roster
   (names, games-attended counts, promos). Replaces the old SMS
   command router + phone-allowlist (ADR-0003, superseded).

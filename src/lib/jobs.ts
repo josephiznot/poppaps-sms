@@ -4,7 +4,7 @@ import * as db from './db';
 import { sendSms } from './twilio';
 import { gameReminder, promoMessage } from './messages';
 import { crossedRewardThreshold } from './points';
-import { RECURRING, localDateInTz, addDaysToKey, seriesDatesBetween, zonedToUtcIso } from './schedule';
+import { RECURRING, localDateInTz, addDaysToKey, seriesDatesBetween, zonedToUtcIso, gameLocalDates } from './schedule';
 
 /** Send a message to many phones sequentially (10DLC is ~1 msg/sec). */
 export async function broadcast(env: Env, phones: string[], message: string): Promise<{ sent: number; failed: number }> {
@@ -32,16 +32,19 @@ export async function ensureUpcomingGames(env: Env, now = new Date()): Promise<n
   const fromKey = localDateInTz(now, tz);
   const toKey = addDaysToKey(fromKey, RECURRING.horizonDays);
   const dates = seriesDatesBetween(RECURRING.anchorDate, RECURRING.intervalDays, fromKey, toKey);
+  const occupied = gameLocalDates(await db.listGames(env.DB), tz); // non-cancelled days already taken
 
   let created = 0;
   for (const date of dates) {
-    if (await db.seriesGameExists(env.DB, date)) continue;
+    if (await db.seriesGameExists(env.DB, date)) continue; // honors Skip + series dedup
+    if (occupied.has(date)) continue; // a manual game already occupies this day
     const startsAt = zonedToUtcIso(`${date}T${RECURRING.time}`, tz);
     await db.createSeriesGame(
       env.DB,
       { seriesDate: date, startsAt, location: RECURRING.location, buyIn: RECURRING.buyIn, description: RECURRING.description },
       new Date().toISOString(),
     );
+    occupied.add(date);
     created++;
     console.log(JSON.stringify({ msg: 'series game created', date, startsAt }));
   }

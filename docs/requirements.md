@@ -106,8 +106,12 @@ regress.
   finalized** — more requirements expected (ADR-0004 is Proposed).
 
 ### 2.6 Admin web app (password-gated)
-- FR-AD1. **Schedule game** — regular or tournament; date/time/location via native
-  pickers; **accepts past dates** for season backfill (FR-B1).
+- FR-AD1. **Schedule game** — host picks the **date** + a **tournament** toggle;
+  time/place/buy-in/game-type are fixed standard values (`src/lib/schedule.ts`).
+  **Accepts past dates** for backfill (FR-B1). **One game per day** is enforced
+  (manual create + the recurring generator both skip a date that's taken). A game
+  can be **Skipped** (kept, won't regenerate) or **Deleted** (also removes its
+  points + attendance).
 - FR-AD2. **Post-game** — for a game: tap attendance (FR-W1) and tap/order the top
   5 (FR-P2), committed together. Re-opening a recorded game **pre-fills** it; re-saving
   **replaces** that game's result (edit/correct — ADR-0002 scoped exception).

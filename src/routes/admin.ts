@@ -8,7 +8,7 @@ import { pointsForPlace } from '../lib/points';
 import { setSession, requireAuth } from '../lib/auth';
 import { broadcast, awardRewardsForAttendees } from '../lib/jobs';
 import { tournamentInvite } from '../lib/messages';
-import { RECURRING, zonedToUtcIso } from '../lib/schedule';
+import { RECURRING, zonedToUtcIso, gameLocalDates } from '../lib/schedule';
 import * as db from '../lib/db';
 
 export const admin = new Hono<{ Bindings: Env }>();
@@ -67,12 +67,17 @@ admin.get('/games', async (c) => {
             : g.is_tournament
               ? ' <span class="pill">🏆</span>'
               : '';
-          let action = `<a href="/admin/games/${esc(g.id)}">Results →</a>`;
-          if (g.cancelled) action = `<span class="muted">—</span>`;
-          else if (g.starts_at > now)
+          let action = g.cancelled
+            ? `<span class="muted">—</span>`
+            : `<a href="/admin/games/${esc(g.id)}">Results →</a>`;
+          if (!g.cancelled && g.starts_at > now)
             action +=
               ` · <form method="post" action="/admin/games/${esc(g.id)}/cancel" style="display:inline">` +
               `<button type="submit">Skip</button></form>`;
+          action +=
+            ` · <form method="post" action="/admin/games/${esc(g.id)}/delete" style="display:inline" ` +
+            `onsubmit="return confirm('Delete this game and its results? This cannot be undone.')">` +
+            `<button type="submit">Delete</button></form>`;
           return (
             `<tr><td>${esc(formatWhen(g.starts_at, c.env.TIMEZONE))}${tag}</td>` +
             `<td>${esc(g.location)}</td><td>${action}</td></tr>`
@@ -95,13 +100,21 @@ admin.get('/games', async (c) => {
     `Past dates are allowed (backfill).</p>` +
     `</form>`;
 
-  return layout('Games', `<h1>Games</h1>${list}${form}`, adminNav);
+  const dup =
+    c.req.query('err') === 'dup'
+      ? `<p class="warn">⚠️ A game already exists on that date — only one game per day. Delete the existing one if you need to replace it.</p>`
+      : '';
+  return layout('Games', `<h1>Games</h1>${dup}${list}${form}`, adminNav);
 });
 
 admin.post('/games', async (c) => {
   const f = new URLSearchParams(await c.req.text());
   const date = f.get('date') ?? '';
   if (!date) return c.redirect('/admin/games');
+
+  // One game per day — reject if a non-cancelled game is already on that date.
+  const occupied = gameLocalDates(await db.listGames(c.env.DB), c.env.TIMEZONE);
+  if (occupied.has(date)) return c.redirect('/admin/games?err=dup');
 
   // Only date + tournament flag are chosen; time/place/buy-in/game are the
   // standard values from src/lib/schedule.ts.
@@ -121,6 +134,11 @@ admin.post('/games', async (c) => {
 
 admin.post('/games/:id/cancel', async (c) => {
   await db.cancelGame(c.env.DB, c.req.param('id'));
+  return c.redirect('/admin/games');
+});
+
+admin.post('/games/:id/delete', async (c) => {
+  await db.deleteGame(c.env.DB, c.req.param('id'));
   return c.redirect('/admin/games');
 });
 

@@ -148,6 +148,15 @@ export async function cancelGame(db: D1Database, id: string): Promise<void> {
   await db.prepare('UPDATE games SET cancelled=1 WHERE id=?').bind(id).run();
 }
 
+/** Hard-delete a game and its points + attendance (atomic) — to clean up dupes. */
+export async function deleteGame(db: D1Database, id: string): Promise<void> {
+  await db.batch([
+    db.prepare('DELETE FROM points_ledger WHERE game_id = ?').bind(id),
+    db.prepare('DELETE FROM attendance WHERE game_id = ?').bind(id),
+    db.prepare('DELETE FROM games WHERE id = ?').bind(id),
+  ]);
+}
+
 // ---------------------------------------------------------------------------
 // Points / seasons
 // ---------------------------------------------------------------------------
