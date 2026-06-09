@@ -48,7 +48,7 @@ export function termsPage(env: Env): Response {
     `<h1>${esc(env.PROGRAM_NAME)} — Text Program Terms</h1>` +
     `<p>Game reminders, occasional promos, and season standings by text. Messages come from ${num}.</p>` +
     `<h2>How to join (opt in)</h2>` +
-    `<p>Text <strong>JOIN</strong> to ${num} from your phone — at the lounge or anytime. We'll text back asking for your first name + last initial (e.g. "Mike R"); reply with it and you're on the list — that's how you appear on the standings. By texting JOIN you agree to receive recurring automated SMS (reminders and occasional promos). <strong>Consent is not a condition of any purchase.</strong></p>` +
+    `<p>Text <strong>JOIN</strong> to <a href="sms:${env.TWILIO_FROM_NUMBER}?&amp;body=JOIN">${num}</a> from your phone — at the lounge or anytime. We'll text back asking for your first name + last initial (e.g. "Mike R"); reply with it and you're on the list — that's how you appear on the standings. By texting JOIN you agree to receive recurring automated SMS (reminders and occasional promos). <strong>Consent is not a condition of any purchase.</strong></p>` +
     `<h2>What you'll get</h2><ul>` +
     `<li>A reminder before each scheduled game (usually the day before).</li>` +
     `<li>Occasional promos and tournament invites.</li>` +
