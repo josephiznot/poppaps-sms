@@ -86,7 +86,7 @@ admin.get('/games', async (c) => {
     `<h2>Schedule a game</h2>` +
     `<form class="stack" method="post" action="/admin/games">` +
     `<label>Date<input type="date" name="date" required></label>` +
-    `<label>Time<input type="time" name="time" required></label>` +
+    `<label>Time<input type="time" name="time" value="18:30" step="1800" required></label>` +
     `<label>Location<input type="text" name="location" value="Poppa P's" required></label>` +
     `<label>Buy-in <input type="text" name="buy_in" placeholder="2 cigars"></label>` +
     `<label>Note <input type="text" name="description" placeholder="Texas Hold'em"></label>` +
