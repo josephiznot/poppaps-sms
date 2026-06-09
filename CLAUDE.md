@@ -61,9 +61,9 @@ game on an off week.
   Cloudflare Access optional in prod): schedule games, post-game (winners +
   attendance in one flow), standings, run-tournament, roster. Replaces the old SMS
   command router + phone-allowlist (ADR-0003, superseded).
-- **Public = read-only standings page** (no login) at `/`, plus the **privacy
-  policy** (`/privacy`) and **program terms** (`/terms`) served by the Worker (on
-  Cloudflare, not GitHub Pages). Names shown as **first name + last initial only**.
+- **Public** (no login, all on the Worker — not GitHub Pages): standings at `/`,
+  **game rules + blind structure** at `/rules`, **program terms** at `/terms`,
+  **privacy** at `/privacy`. Names shown as **first name + last initial only**.
 
 ## Roadmap / status
 
@@ -76,8 +76,9 @@ game on an off week.
 5. **Rewards / attendance** — ✅ mechanism built (host-marked attendance →
    data-driven promos via SMS); concrete reward rules still forming —
    `seed.sql` has a placeholder. (ADR-0004)
-- **Recurring schedule** (anchor + 14-day interval auto-generating games) — **not
-  built**; the host schedules each game.
+6. **Recurring schedule** — ✅ built. A biweekly rule (`src/lib/schedule.ts`:
+   anchor + 14-day interval, fixed time/place/buy-in) is materialized by the cron;
+   the host can Skip/Cancel any occurrence (row kept → not regenerated).
 
 ## Repo structure
 
@@ -95,13 +96,16 @@ src/
     db.ts                All D1 queries
     twilio.ts            Send (fetch) + signature validation (Web Crypto) + TwiML
     messages.ts          Keyword parsing (parseIntent) + SMS copy
-    jobs.ts              Reminders cron + reward engine
+    jobs.ts              Cron: recurring-game generator + reminders + reward engine
+    schedule.ts          Recurring biweekly rule (config) + date helpers (pure)
     points.ts            Scoring (pure)
     phone.ts             E.164 (pure)
     auth.ts              Admin session cookie
     html.ts              Server-rendered HTML layout
+  views/                 policies.ts (privacy/terms) + rules.ts (game rules)
+migrations/              D1 migrations for already-deployed databases
 docs/                    requirements.md + ADRs + opt-in/privacy pages
-tests/                   Vitest unit tests (messages, phone, points)
+tests/                   Vitest unit tests (messages, phone, points, schedule)
 ```
 
 ## Key commands

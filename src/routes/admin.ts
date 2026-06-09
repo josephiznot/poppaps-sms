@@ -8,6 +8,7 @@ import { pointsForPlace } from '../lib/points';
 import { setSession, requireAuth } from '../lib/auth';
 import { broadcast, awardRewardsForAttendees } from '../lib/jobs';
 import { tournamentInvite } from '../lib/messages';
+import { zonedToUtcIso } from '../lib/schedule';
 import * as db from '../lib/db';
 
 export const admin = new Hono<{ Bindings: Env }>();
@@ -56,16 +57,27 @@ admin.get('/', (c) => c.redirect('/admin/games'));
 
 admin.get('/games', async (c) => {
   const games = await db.listGames(c.env.DB);
+  const now = new Date().toISOString();
   const list = games.length
     ? `<table><thead><tr><th>When</th><th>Where</th><th></th></tr></thead><tbody>` +
       games
-        .map(
-          (g) =>
-            `<tr><td>${esc(formatWhen(g.starts_at, c.env.TIMEZONE))}` +
-            `${g.is_tournament ? ' <span class="pill">🏆</span>' : ''}</td>` +
-            `<td>${esc(g.location)}</td>` +
-            `<td><a href="/admin/games/${esc(g.id)}">Results →</a></td></tr>`,
-        )
+        .map((g) => {
+          const tag = g.cancelled
+            ? ' <span class="pill warn">cancelled</span>'
+            : g.is_tournament
+              ? ' <span class="pill">🏆</span>'
+              : '';
+          let action = `<a href="/admin/games/${esc(g.id)}">Results →</a>`;
+          if (g.cancelled) action = `<span class="muted">—</span>`;
+          else if (g.starts_at > now)
+            action +=
+              ` · <form method="post" action="/admin/games/${esc(g.id)}/cancel" style="display:inline">` +
+              `<button type="submit">Skip</button></form>`;
+          return (
+            `<tr><td>${esc(formatWhen(g.starts_at, c.env.TIMEZONE))}${tag}</td>` +
+            `<td>${esc(g.location)}</td><td>${action}</td></tr>`
+          );
+        })
         .join('') +
       `</tbody></table>`
     : `<p class="muted">No games yet.</p>`;
@@ -104,6 +116,11 @@ admin.post('/games', async (c) => {
     },
     new Date().toISOString(),
   );
+  return c.redirect('/admin/games');
+});
+
+admin.post('/games/:id/cancel', async (c) => {
+  await db.cancelGame(c.env.DB, c.req.param('id'));
   return c.redirect('/admin/games');
 });
 
@@ -312,14 +329,4 @@ admin.post('/rewards/redeem', async (c) => {
 
 function ordinal(n: number): string {
   return ['1st', '2nd', '3rd', '4th', '5th'][n - 1] ?? `${n}th`;
-}
-
-/** Interpret a wall-clock "YYYY-MM-DDTHH:MM" in `timeZone` and return UTC ISO. */
-function zonedToUtcIso(localWall: string, timeZone: string): string {
-  const asUtc = new Date(`${localWall}:00Z`);
-  if (Number.isNaN(asUtc.getTime())) return new Date().toISOString();
-  const tzShown = new Date(asUtc.toLocaleString('en-US', { timeZone }));
-  const utcShown = new Date(asUtc.toLocaleString('en-US', { timeZone: 'UTC' }));
-  const offset = tzShown.getTime() - utcShown.getTime();
-  return new Date(asUtc.getTime() - offset).toISOString();
 }

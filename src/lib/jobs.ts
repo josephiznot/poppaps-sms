@@ -4,6 +4,7 @@ import * as db from './db';
 import { sendSms } from './twilio';
 import { gameReminder, promoMessage } from './messages';
 import { crossedRewardThreshold } from './points';
+import { RECURRING, localDateInTz, addDaysToKey, seriesDatesBetween, zonedToUtcIso } from './schedule';
 
 /** Send a message to many phones sequentially (10DLC is ~1 msg/sec). */
 export async function broadcast(env: Env, phones: string[], message: string): Promise<{ sent: number; failed: number }> {
@@ -19,6 +20,32 @@ export async function broadcast(env: Env, phones: string[], message: string): Pr
     }
   }
   return { sent, failed };
+}
+
+/**
+ * Cron job: keep the recurring biweekly game materialized so reminders fire.
+ * Creates any series occurrence within the horizon that doesn't already exist;
+ * a cancelled/skipped occurrence keeps its row, so it's never regenerated.
+ */
+export async function ensureUpcomingGames(env: Env, now = new Date()): Promise<number> {
+  const tz = env.TIMEZONE;
+  const fromKey = localDateInTz(now, tz);
+  const toKey = addDaysToKey(fromKey, RECURRING.horizonDays);
+  const dates = seriesDatesBetween(RECURRING.anchorDate, RECURRING.intervalDays, fromKey, toKey);
+
+  let created = 0;
+  for (const date of dates) {
+    if (await db.seriesGameExists(env.DB, date)) continue;
+    const startsAt = zonedToUtcIso(`${date}T${RECURRING.time}`, tz);
+    await db.createSeriesGame(
+      env.DB,
+      { seriesDate: date, startsAt, location: RECURRING.location, buyIn: RECURRING.buyIn, description: RECURRING.description },
+      new Date().toISOString(),
+    );
+    created++;
+    console.log(JSON.stringify({ msg: 'series game created', date, startsAt }));
+  }
+  return created;
 }
 
 /** Cron job: remind subscribers about games starting within the lead window. */

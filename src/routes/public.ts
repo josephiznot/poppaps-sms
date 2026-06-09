@@ -4,6 +4,7 @@ import type { Env } from '../types';
 import { layout, esc } from '../lib/html';
 import { formatWhen } from '../lib/messages';
 import { privacyPage, termsPage } from '../views/policies';
+import { rulesPage } from '../views/rules';
 import * as db from '../lib/db';
 
 export const publicRoutes = new Hono<{ Bindings: Env }>();
@@ -42,10 +43,11 @@ publicRoutes.get('/', async (c) => {
     `<p class="muted">Current season standings. Points reset after each Special Players tournament.</p>` +
     `<h2>Standings</h2>${standingsHtml}` +
     `<h2>Recent winners</h2>${winnersHtml}` +
-    `<p class="muted" style="margin-top:2rem"><a href="/terms">Program terms</a> · <a href="/privacy">Privacy</a></p>`;
+    `<p class="muted" style="margin-top:2rem"><a href="/rules">Game rules</a> · <a href="/terms">Program terms</a> · <a href="/privacy">Privacy</a></p>`;
 
   return layout(`${c.env.PROGRAM_NAME} — Standings`, body);
 });
 
+publicRoutes.get('/rules', (c) => rulesPage(c.env));
 publicRoutes.get('/privacy', (c) => privacyPage(c.env));
 publicRoutes.get('/terms', (c) => termsPage(c.env));

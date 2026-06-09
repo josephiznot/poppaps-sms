@@ -110,7 +110,7 @@ export async function listGames(db: D1Database): Promise<Game[]> {
 
 export async function gamesDueForReminder(db: D1Database, nowIso: string, cutoffIso: string): Promise<Game[]> {
   const r = await db
-    .prepare('SELECT * FROM games WHERE reminder_sent=0 AND starts_at >= ? AND starts_at <= ?')
+    .prepare('SELECT * FROM games WHERE reminder_sent=0 AND cancelled=0 AND starts_at >= ? AND starts_at <= ?')
     .bind(nowIso, cutoffIso)
     .all<Game>();
   return r.results ?? [];
@@ -118,6 +118,34 @@ export async function gamesDueForReminder(db: D1Database, nowIso: string, cutoff
 
 export async function markReminderSent(db: D1Database, id: string): Promise<void> {
   await db.prepare('UPDATE games SET reminder_sent=1 WHERE id=?').bind(id).run();
+}
+
+/** True if an auto-scheduled game already exists for this recurring date. */
+export async function seriesGameExists(db: D1Database, seriesDate: string): Promise<boolean> {
+  const r = await db.prepare('SELECT COUNT(*) AS c FROM games WHERE series_date=?').bind(seriesDate).first<{ c: number }>();
+  return (r?.c ?? 0) > 0;
+}
+
+export async function createSeriesGame(
+  db: D1Database,
+  g: { seriesDate: string; startsAt: string; location: string; buyIn?: string; description?: string },
+  now: string,
+): Promise<string> {
+  const id = uid();
+  await db
+    .prepare(
+      `INSERT INTO games (id, starts_at, location, is_tournament, description, buy_in, reminder_sent, cancelled, series_date, created_at)
+       VALUES (?, ?, ?, 0, ?, ?, 0, 0, ?, ?)
+       ON CONFLICT(series_date) DO NOTHING`,
+    )
+    .bind(id, g.startsAt, g.location, g.description ?? null, g.buyIn ?? null, g.seriesDate, now)
+    .run();
+  return id;
+}
+
+/** Skip/cancel a game — kept (not deleted) so the series won't regenerate it. */
+export async function cancelGame(db: D1Database, id: string): Promise<void> {
+  await db.prepare('UPDATE games SET cancelled=1 WHERE id=?').bind(id).run();
 }
 
 // ---------------------------------------------------------------------------

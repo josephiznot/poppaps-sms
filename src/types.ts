@@ -37,6 +37,8 @@ export interface Game {
   description: string | null;
   buy_in: string | null;
   reminder_sent: number;
+  cancelled: number;
+  series_date: string | null;
   created_at: string;
 }
 

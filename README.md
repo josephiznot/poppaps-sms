@@ -26,7 +26,8 @@ SMS goes out via Twilio's REST API. See [`docs/`](docs/) for the design + ADRs.
 | `POST /sms` | Players (Twilio webhook) | JOIN / STOP / HELP + the one-step name reply. Signature-verified. |
 | `/admin/*` | Host (password) | Schedule games; post-game winners + attendance; standings; run tournament; roster + promos. |
 | `GET /` | Public | Season standings + recent winners (first name + last initial only). |
-| Cron `0 * * * *` | — | Hourly: text reminders for games within the lead window. |
+| `GET /rules` `/terms` `/privacy` | Public | Game rules + blind structure; program terms; privacy policy. |
+| Cron `0 * * * *` | — | Hourly: keep the biweekly game on the calendar, then text reminders for games within the lead window. |
 
 ---
 
@@ -75,6 +76,14 @@ After the first deploy:
 
 Text **JOIN** to your number from your phone to test the whole loop.
 
+> **Upgrading an existing deployment?** When the schema changes, apply the new
+> migration to your live DB *before* (re)deploying — it's additive and safe to run once:
+>
+> ```bash
+> npm run db:migrate:remote
+> npm run deploy
+> ```
+
 ## Local development
 
 ```bash
@@ -96,8 +105,11 @@ Real SMS sending still needs valid Twilio creds in `.dev.vars`; everything else
 
 ## Day-to-day (all in `/admin`)
 
-- **Games** — schedule a game (date/time pickers; Central time; past dates OK for
-  backfill). Mark a game as the Special Players tournament with the checkbox.
+- **Games** — the **biweekly game auto-appears** on the calendar (rule in
+  `src/lib/schedule.ts`: anchor date, every 14 days, fixed time/place/buy-in); use
+  **Skip** next to an upcoming game to cancel just that date and the series
+  continues. You can also schedule one-off games (date/time pickers; Central time;
+  past dates OK for backfill) and mark one as the Special Players tournament.
 - **Post-game** (open a game) — tap who attended and pick the top 5; saving awards
   5·4·3·2·1 points and fires any earned promos.
 - **Standings** — current season.

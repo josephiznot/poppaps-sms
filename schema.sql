@@ -21,9 +21,15 @@ CREATE TABLE IF NOT EXISTS games (
   description   TEXT,
   buy_in        TEXT,
   reminder_sent INTEGER NOT NULL DEFAULT 0,
+  cancelled     INTEGER NOT NULL DEFAULT 0,
+  series_date   TEXT,                    -- local date key for auto-scheduled games (NULL = one-off)
   created_at    TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_games_starts_at ON games(starts_at);
+-- One auto-generated game per recurring date (also blocks duplicate generation).
+-- One-off games have series_date NULL; SQLite treats NULLs as distinct in a UNIQUE
+-- index, so multiple one-offs coexist while recurring dates stay unique.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_games_series_date ON games(series_date);
 
 -- Append-only. One row per member per game; corrections are new (possibly
 -- negative) rows. Never UPDATE/DELETE.
