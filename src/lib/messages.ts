@@ -26,10 +26,12 @@ export function parseIntent(body: string | undefined | null): Intent {
 
 /** Asked right after JOIN, to capture a display name. */
 export function askNameMessage(env: Env): string {
+  const terms = env.PUBLIC_BASE_URL ? ` Terms: ${env.PUBLIC_BASE_URL}/terms.` : '';
   return (
     `${env.PROGRAM_NAME}: You're in! 🃏 Reply with your first name + last initial ` +
     `(e.g. "Mike R") so we can put you on the standings. ` +
-    `Msg & data rates may apply. Reply STOP to cancel, HELP for help.`
+    `Recurring msgs; frequency varies. Msg & data rates may apply.${terms} ` +
+    `Reply STOP to cancel, HELP for help.`
   );
 }
 
