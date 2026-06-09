@@ -128,6 +128,9 @@ regress.
 - FR-PUB4. A public **game-rules page** (`/rules`) shows the format, blind
   structure, buy-in/buy-back, and cigar payouts — viewable ahead of time and a
   reference when the host is out.
+- FR-PUB5. A public **game page** (`/game/:id`) shows that game's placed finishers.
+- FR-PUB6. A public **seasons page** (`/seasons`) shows the current season plus past
+  seasons' Special Players (top-8 snapshot) + champion (numbered chronologically).
 
 ### 2.8 Backfill
 - FR-B1. The host can enter **completed past games** (FR-AD1 past dates + FR-AD2

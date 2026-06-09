@@ -37,10 +37,20 @@ const STYLE = `
   .ok { color: #16a34a; } .warn { color: #d97706; }
 `;
 
+// Ace-of-spades favicon (inline SVG data URI — no asset file needed).
+const FAVICON =
+  `<link rel="icon" href="data:image/svg+xml,` +
+  `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>` +
+  `<rect width='100' height='100' rx='20' fill='%23111'/>` +
+  `<text x='50' y='73' font-size='66' text-anchor='middle' fill='%23fff'>♠</text>` +
+  `<text x='23' y='33' font-size='26' text-anchor='middle' font-family='Georgia,serif' fill='%23fff'>A</text>` +
+  `</svg>">`;
+
 export function layout(title: string, body: string, nav = ''): Response {
   const html =
     `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
     `<meta name="viewport" content="width=device-width, initial-scale=1">` +
+    FAVICON +
     `<title>${esc(title)}</title><style>${STYLE}</style></head>` +
     `<body>${nav}${body}</body></html>`;
   return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
@@ -50,3 +60,6 @@ export const adminNav =
   `<nav><a href="/admin/games">Games</a><a href="/admin/standings">Standings</a>` +
   `<a href="/admin/tournament">Tournament</a><a href="/admin/roster">Roster</a>` +
   `<a href="/">Public&nbsp;↗</a></nav>`;
+
+export const publicNav =
+  `<nav><a href="/">Standings</a><a href="/seasons">Seasons</a><a href="/rules">Rules</a></nav>`;

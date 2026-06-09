@@ -318,25 +318,66 @@ export async function markRewardRedeemed(db: D1Database, id: string, now: string
 // Public history
 // ---------------------------------------------------------------------------
 
-export interface WinnerRow {
-  id: string;
-  starts_at: string;
-  location: string;
-  is_tournament: number;
+export interface GameResultRow {
+  member_phone: string;
   display_name: string | null;
+  points: number;
 }
 
-export async function recentGameWinners(db: D1Database, limit: number): Promise<WinnerRow[]> {
+/** All scored finishers for one game, highest first (for the public game page). */
+export async function gameResults(db: D1Database, gameId: string): Promise<GameResultRow[]> {
   const r = await db
     .prepare(
-      `SELECT g.id, g.starts_at, g.location, g.is_tournament, m.display_name
+      `SELECT p.member_phone, m.display_name, p.points
+       FROM points_ledger p LEFT JOIN members m ON m.phone = p.member_phone
+       WHERE p.game_id = ? ORDER BY p.points DESC`,
+    )
+    .bind(gameId)
+    .all<GameResultRow>();
+  return r.results ?? [];
+}
+
+export interface RecentResultRow {
+  id: string;
+  starts_at: string;
+  is_tournament: number;
+  winner: string | null;
+}
+
+/** Recent games that have any results, with the 1st-place name if there is one. */
+export async function recentResults(db: D1Database, limit: number): Promise<RecentResultRow[]> {
+  const r = await db
+    .prepare(
+      `SELECT g.id, g.starts_at, g.is_tournament,
+              (SELECT m.display_name FROM points_ledger p JOIN members m ON m.phone = p.member_phone
+               WHERE p.game_id = g.id AND p.points = 5 LIMIT 1) AS winner
        FROM games g
-       JOIN points_ledger p ON p.game_id = g.id AND p.points = 5
-       LEFT JOIN members m ON m.phone = p.member_phone
-       ORDER BY g.starts_at DESC
-       LIMIT ?`,
+       WHERE EXISTS (SELECT 1 FROM points_ledger p WHERE p.game_id = g.id)
+       ORDER BY g.starts_at DESC LIMIT ?`,
     )
     .bind(limit)
-    .all<WinnerRow>();
+    .all<RecentResultRow>();
   return r.results ?? [];
+}
+
+export interface SeasonRow {
+  id: string;
+  closed_at: string;
+  snapshot: { invited?: Array<{ phone: string; name: string | null }>; gameId?: string | null; sent?: number };
+}
+
+/** Past seasons (each closed by a Special Players tournament), oldest first. */
+export async function listSeasons(db: D1Database): Promise<SeasonRow[]> {
+  const r = await db
+    .prepare('SELECT id, closed_at, snapshot FROM seasons ORDER BY closed_at ASC')
+    .all<{ id: string; closed_at: string; snapshot: string }>();
+  return (r.results ?? []).map((row) => {
+    let snapshot: SeasonRow['snapshot'] = {};
+    try {
+      snapshot = JSON.parse(row.snapshot);
+    } catch {
+      snapshot = {};
+    }
+    return { id: row.id, closed_at: row.closed_at, snapshot };
+  });
 }
