@@ -14,11 +14,24 @@ const footerLinks =
   `<p class="muted" style="margin-top:2rem"><a href="/rules">Game rules</a> · ` +
   `<a href="/terms">SMS terms</a> · <a href="/privacy">Privacy</a></p>`;
 
+// Top ranks get a playing-card badge: 1st = A, 2nd = K, 3rd = Q, 4th = J, 5th = 10.
+const RANK_CARDS = ['A', 'K', 'Q', 'J', '10'];
+function rankBadge(i: number): string {
+  const r = RANK_CARDS[i];
+  return r ? `<span class="card">${r}<small>♠</small></span>` : `${i + 1}`;
+}
+
 function standingsTable(rows: StandingRow[]): string {
   if (!rows.length) return `<p class="muted">No points yet this season — check back after the next game.</p>`;
   return (
-    `<table><thead><tr><th>#</th><th>Player</th><th>Pts</th></tr></thead><tbody>` +
-    rows.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.display_name ?? 'New player')}</td><td>${r.total}</td></tr>`).join('') +
+    `<table><thead><tr><th>Rank</th><th>Player</th><th style="text-align:right">Pts</th></tr></thead><tbody>` +
+    rows
+      .map(
+        (r, i) =>
+          `<tr><td>${rankBadge(i)}</td><td>${esc(r.display_name ?? 'New player')}</td>` +
+          `<td style="text-align:right">${r.total}</td></tr>`,
+      )
+      .join('') +
     `</tbody></table>`
   );
 }

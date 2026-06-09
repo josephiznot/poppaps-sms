@@ -34,6 +34,10 @@ const STYLE = `
   .muted { opacity: .65; font-size: .9rem; }
   .pill { display: inline-block; padding: .05rem .5rem; border: 1px solid var(--bd);
           border-radius: 1rem; font-size: .78rem; }
+  .card { display: inline-flex; align-items: center; justify-content: center; min-width: 1.7rem;
+          padding: .08rem .3rem; border: 1px solid #00000033; border-radius: .35rem;
+          background: #fff; color: #111; font: 700 .85rem/1 Georgia, serif; }
+  .card small { font-size: .78em; margin-left: 1px; }
   .ok { color: #16a34a; } .warn { color: #d97706; }
 `;
 
