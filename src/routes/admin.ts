@@ -189,6 +189,7 @@ admin.get('/games/:id', async (c) => {
     `<form class="stack" method="post" action="/admin/games/${esc(game.id)}/result">` +
     `<h2>Top 5 (5·4·3·2·1 pts)</h2>${winnerSelects}` +
     `<h2>Who attended?</h2><p class="muted">Winners count automatically.</p>${attendanceRows}` +
+    `<label class="row"><input type="checkbox" name="is_tournament" value="1"${game.is_tournament ? ' checked' : ''}> 🏆 Special Players tournament</label>` +
     `<button class="primary" type="submit">Save results</button></form>`;
 
   return layout(title, body, adminNav);
@@ -222,6 +223,7 @@ admin.post('/games/:id/result', async (c) => {
   const attendees = new Set<string>([...f.getAll('attend'), ...winners]);
   for (const phone of attendees) await db.markAttendance(c.env.DB, phone, game.id, now);
 
+  await db.setGameTournament(c.env.DB, game.id, f.get('is_tournament') === '1');
   await awardRewardsForAttendees(c.env, [...attendees], now);
   return c.redirect('/admin/standings');
 });

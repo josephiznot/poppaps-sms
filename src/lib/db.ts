@@ -157,6 +157,11 @@ export async function deleteGame(db: D1Database, id: string): Promise<void> {
   ]);
 }
 
+/** Toggle a game's tournament flag (a label only — does not affect seasons). */
+export async function setGameTournament(db: D1Database, id: string, isTournament: boolean): Promise<void> {
+  await db.prepare('UPDATE games SET is_tournament=? WHERE id=?').bind(isTournament ? 1 : 0, id).run();
+}
+
 // ---------------------------------------------------------------------------
 // Points / seasons
 // ---------------------------------------------------------------------------
