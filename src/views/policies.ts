@@ -38,7 +38,7 @@ export function privacyPage(env: Env): Response {
     `<p>We keep your information while you participate and for a reasonable period after, so we can honor opt-outs and keep season history accurate. You can ask the host at Poppa P's to delete your record entirely.</p>` +
     `<h2>Contact</h2>` +
     `<p>Questions about this program or your data? Ask the host at Poppa P's, or reply HELP to any message.</p>` +
-    footer('/terms', 'Program terms');
+    footer('/terms', 'SMS terms');
   return layout(`Privacy — ${env.PROGRAM_NAME}`, body);
 }
 
@@ -48,7 +48,7 @@ export function termsPage(env: Env): Response {
     `<h1>${esc(env.PROGRAM_NAME)} — Text Program Terms</h1>` +
     `<p>Game reminders, occasional promos, and season standings by text. Messages come from ${num}.</p>` +
     `<h2>How to join (opt in)</h2>` +
-    `<p>Text <strong>JOIN</strong> to ${num} from your phone (done in person at the lounge). We'll text back asking for your first name + last initial (e.g. "Mike R"); reply with it and you're on the list — that's how you appear on the standings. By texting JOIN you agree to receive recurring automated SMS (reminders and occasional promos). <strong>Consent is not a condition of any purchase.</strong></p>` +
+    `<p>Text <strong>JOIN</strong> to ${num} from your phone — at the lounge or anytime. We'll text back asking for your first name + last initial (e.g. "Mike R"); reply with it and you're on the list — that's how you appear on the standings. By texting JOIN you agree to receive recurring automated SMS (reminders and occasional promos). <strong>Consent is not a condition of any purchase.</strong></p>` +
     `<h2>What you'll get</h2><ul>` +
     `<li>A reminder before each scheduled game (usually the day before).</li>` +
     `<li>Occasional promos and tournament invites.</li>` +

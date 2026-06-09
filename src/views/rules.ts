@@ -57,7 +57,7 @@ export function rulesPage(env: Env): Response {
     `<li><strong>3rd place</strong> — <strong>1/6</strong> of the remaining pot.</li>` +
     `</ul>` +
 
-    `<p class="muted" style="margin-top:2rem"><a href="/">← Standings</a> · <a href="/terms">Program terms</a> · <a href="/privacy">Privacy</a></p>`;
+    `<p class="muted" style="margin-top:2rem"><a href="/">← Standings</a> · <a href="/terms">SMS terms</a> · <a href="/privacy">Privacy</a></p>`;
 
   return layout(`Game Rules — ${env.PROGRAM_NAME}`, body);
 }

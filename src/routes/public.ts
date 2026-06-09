@@ -43,7 +43,7 @@ publicRoutes.get('/', async (c) => {
     `<p class="muted">Current season standings. Points reset after each Special Players tournament.</p>` +
     `<h2>Standings</h2>${standingsHtml}` +
     `<h2>Recent winners</h2>${winnersHtml}` +
-    `<p class="muted" style="margin-top:2rem"><a href="/rules">Game rules</a> · <a href="/terms">Program terms</a> · <a href="/privacy">Privacy</a></p>`;
+    `<p class="muted" style="margin-top:2rem"><a href="/rules">Game rules</a> · <a href="/terms">SMS terms</a> · <a href="/privacy">Privacy</a></p>`;
 
   return layout(`${c.env.PROGRAM_NAME} — Standings`, body);
 });
