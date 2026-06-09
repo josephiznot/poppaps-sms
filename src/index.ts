@@ -15,6 +15,17 @@ import { ensureUpcomingGames, sendDueReminders } from './lib/jobs';
 
 const app = new Hono<{ Bindings: Env }>();
 
+// Canonicalize: 301-redirect www.* to the bare apex (e.g. www.poppaps.cards ->
+// poppaps.cards), preserving the path + query.
+app.use('*', async (c, next) => {
+  const url = new URL(c.req.url);
+  if (url.hostname.startsWith('www.')) {
+    url.hostname = url.hostname.slice(4);
+    return c.redirect(url.toString(), 301);
+  }
+  return next();
+});
+
 app.route('/sms', sms);
 app.route('/admin', admin);
 app.route('/', publicRoutes);

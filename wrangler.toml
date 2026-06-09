@@ -3,11 +3,12 @@ main = "src/index.ts"
 compatibility_date = "2024-11-01"
 workers_dev = true
 
-# Custom domain: poppaps.cards is a Cloudflare zone in this account, so
-# `wrangler deploy` provisions the DNS record + SSL cert and routes the apex to
-# this Worker. The workers.dev URL keeps working alongside it.
+# Custom domains: poppaps.cards (apex) + www.poppaps.cards. `wrangler deploy`
+# provisions DNS + SSL for both. The Worker 301-redirects www -> apex (see
+# src/index.ts), so the apex stays canonical. The workers.dev URL also keeps working.
 routes = [
-  { pattern = "poppaps.cards", custom_domain = true }
+  { pattern = "poppaps.cards", custom_domain = true },
+  { pattern = "www.poppaps.cards", custom_domain = true }
 ]
 
 # Hourly check that sends game-night reminders (and is cheap when idle).
