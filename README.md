@@ -127,6 +127,18 @@ setting and into `PUBLIC_BASE_URL`.
 
 ## Compliance notes
 
+- **Opt-in disclosure must be shown *before* anyone texts JOIN.** Wherever opt-in
+  is collected (a sign/card at the lounge, or a web page), the call-to-action must
+  display: program name · what they'll get (reminders + promos) · "Recurring msgs;
+  frequency varies" · "Msg & data rates may apply" · "Reply STOP to cancel, HELP
+  for help" · "Consent is not a condition of any purchase" · links to `/terms` and
+  `/privacy`. **Ready-made artifacts** carrying all of this:
+  - [`docs/opt-in-sign.md`](docs/opt-in-sign.md) — printable counter card for the lounge.
+  - [`docs/opt-in-web.html`](docs/opt-in-web.html) — embeddable web version for a website.
+
+  (Twilio doesn't require a *physical* sign specifically — it requires consent +
+  these disclosures at the opt-in point, in any medium. The Twilio number may only
+  message people who have already opted in.)
 - SMS is **players-only**: reminders, promos, invites out; JOIN/STOP/HELP in.
   STOP/HELP are handled; copy is framed as **game reminders + promos**, not
   gambling (cigars, no cash) — carriers scrutinize gambling content.
