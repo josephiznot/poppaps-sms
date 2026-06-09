@@ -187,14 +187,17 @@ admin.post('/games/:id/result', async (c) => {
   await db.clearGameResults(c.env.DB, game.id);
   await db.clearAttendanceForGame(c.env.DB, game.id);
 
-  // Ordered winners (dedup, keep first occurrence).
+  // Award points by the ACTUAL place selected (place 1 = 5 pts … place 5 = 1 pt),
+  // NOT by how many slots were filled — so a lone 5th-place entry gets 1 point,
+  // not 5, and gaps are fine (handy before everyone has opted in). Dedup keeps a
+  // player's highest place if they're listed twice.
   const winners: string[] = [];
   for (const p of [1, 2, 3, 4, 5]) {
     const phone = f.get(`place${p}`);
-    if (phone && !winners.includes(phone)) winners.push(phone);
-  }
-  for (let i = 0; i < winners.length; i++) {
-    await db.addPoints(c.env.DB, winners[i]!, game.id, pointsForPlace(i), now);
+    if (phone && !winners.includes(phone)) {
+      winners.push(phone);
+      await db.addPoints(c.env.DB, phone, game.id, pointsForPlace(p - 1), now);
+    }
   }
 
   // Attendance = checked ∪ winners.
