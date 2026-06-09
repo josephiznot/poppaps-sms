@@ -3,6 +3,13 @@ main = "src/index.ts"
 compatibility_date = "2024-11-01"
 workers_dev = true
 
+# Custom domain: poppaps.cards is a Cloudflare zone in this account, so
+# `wrangler deploy` provisions the DNS record + SSL cert and routes the apex to
+# this Worker. The workers.dev URL keeps working alongside it.
+routes = [
+  { pattern = "poppaps.cards", custom_domain = true }
+]
+
 # Hourly check that sends game-night reminders (and is cheap when idle).
 [triggers]
 crons = ["0 * * * *"]
@@ -16,9 +23,8 @@ SUPPORT_CONTACT = "Ask the host at Poppa P's"
 TIMEZONE = "America/Chicago"
 REMINDER_LEAD_HOURS = "24"
 VALIDATE_TWILIO_SIGNATURE = "true"
-# Set this to your deployed Worker URL after the first deploy so SMS can link
-# to the public standings page, e.g. https://poker-sms.<subdomain>.workers.dev
-PUBLIC_BASE_URL = "https://poker-sms.poppaps.workers.dev"
+# Public site URL used in SMS links (opt-in Terms link, standings link).
+PUBLIC_BASE_URL = "https://poppaps.cards"
 
 # Created with `wrangler d1 create poker-sms` — paste the printed database_id here.
 [[d1_databases]]

@@ -65,12 +65,13 @@ npm run deploy
 
 After the first deploy:
 
-1. Copy your Worker URL (e.g. `https://poker-sms.<you>.workers.dev`) into
-   `wrangler.toml` as `PUBLIC_BASE_URL`, and `npm run deploy` again (so SMS can
-   link to the standings page).
+1. The site is served at **https://poppaps.cards** (custom domain set in
+   `wrangler.toml` → `routes`; `wrangler deploy` provisions DNS + SSL). It also
+   stays reachable at the `*.workers.dev` URL. `PUBLIC_BASE_URL` is the custom
+   domain so SMS links use it.
 2. In the **Twilio Console → your number → Messaging → "A message comes in"**,
-   set **Webhook**, **HTTP POST**, to `https://…workers.dev/sms`.
-3. Visit `https://…workers.dev/admin` and sign in with your `ADMIN_PASSWORD`.
+   set **Webhook**, **HTTP POST**, to `https://poppaps.cards/sms`.
+3. Visit `https://poppaps.cards/admin` and sign in with your `ADMIN_PASSWORD`.
 4. (Recommended for production) front `/admin` with **Cloudflare Access** for SSO
    on top of the password — see ADR-0005.
 
