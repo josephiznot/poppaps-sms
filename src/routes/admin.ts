@@ -8,7 +8,7 @@ import { pointsForPlace } from '../lib/points';
 import { setSession, requireAuth } from '../lib/auth';
 import { broadcast, awardRewardsForAttendees } from '../lib/jobs';
 import { tournamentInvite } from '../lib/messages';
-import { zonedToUtcIso } from '../lib/schedule';
+import { RECURRING, zonedToUtcIso } from '../lib/schedule';
 import * as db from '../lib/db';
 
 export const admin = new Hono<{ Bindings: Env }>();
@@ -86,13 +86,13 @@ admin.get('/games', async (c) => {
     `<h2>Schedule a game</h2>` +
     `<form class="stack" method="post" action="/admin/games">` +
     `<label>Date<input type="date" name="date" required></label>` +
-    `<label>Time<input type="time" name="time" value="18:30" step="1800" required></label>` +
-    `<label>Location<input type="text" name="location" value="Poppa P's" required></label>` +
-    `<label>Buy-in <input type="text" name="buy_in" placeholder="2 cigars"></label>` +
-    `<label>Note <input type="text" name="description" placeholder="Texas Hold'em"></label>` +
     `<label class="row"><input type="checkbox" name="is_tournament" value="1"> Special Players tournament</label>` +
     `<button class="primary" type="submit">Schedule</button>` +
-    `<p class="muted">Times are ${esc(c.env.TIMEZONE)}. Past dates are allowed (backfill).</p>` +
+    `<p class="muted">Every game uses these standard details ` +
+    `(change in <code>src/lib/schedule.ts</code> if they ever do):<br>` +
+    `🕡 ${to12h(RECURRING.time)} ${esc(c.env.TIMEZONE)} · 📍 ${esc(RECURRING.location)} · ` +
+    `🚬 ${esc(RECURRING.buyIn)} · 🃏 ${esc(RECURRING.description)}<br>` +
+    `Past dates are allowed (backfill).</p>` +
     `</form>`;
 
   return layout('Games', `<h1>Games</h1>${list}${form}`, adminNav);
@@ -101,18 +101,18 @@ admin.get('/games', async (c) => {
 admin.post('/games', async (c) => {
   const f = new URLSearchParams(await c.req.text());
   const date = f.get('date') ?? '';
-  const time = f.get('time') ?? '';
-  const location = (f.get('location') ?? '').trim();
-  if (!date || !time || !location) return c.redirect('/admin/games');
+  if (!date) return c.redirect('/admin/games');
 
+  // Only date + tournament flag are chosen; time/place/buy-in/game are the
+  // standard values from src/lib/schedule.ts.
   await db.createGame(
     c.env.DB,
     {
-      starts_at: zonedToUtcIso(`${date}T${time}`, c.env.TIMEZONE),
-      location,
+      starts_at: zonedToUtcIso(`${date}T${RECURRING.time}`, c.env.TIMEZONE),
+      location: RECURRING.location,
       is_tournament: f.get('is_tournament') === '1',
-      description: (f.get('description') ?? '').trim() || undefined,
-      buy_in: (f.get('buy_in') ?? '').trim() || undefined,
+      description: RECURRING.description,
+      buy_in: RECURRING.buyIn,
     },
     new Date().toISOString(),
   );
@@ -335,4 +335,12 @@ admin.post('/rewards/redeem', async (c) => {
 
 function ordinal(n: number): string {
   return ['1st', '2nd', '3rd', '4th', '5th'][n - 1] ?? `${n}th`;
+}
+
+/** "18:30" -> "6:30 PM". */
+function to12h(hhmm: string): string {
+  const [h = 0, m = 0] = hhmm.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = ((h + 11) % 12) + 1;
+  return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
 }
