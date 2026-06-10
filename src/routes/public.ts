@@ -7,6 +7,7 @@ import { formatWhen } from '../lib/messages';
 import { privacyPage, termsPage } from '../views/policies';
 import { rulesPage } from '../views/rules';
 import { badgesForAll } from '../lib/badges';
+import { cardForRank } from '../lib/points';
 import * as db from '../lib/db';
 
 export const publicRoutes = new Hono<{ Bindings: Env }>();
@@ -15,10 +16,9 @@ const footerLinks =
   `<p class="muted" style="margin-top:2rem"><a href="/rules">Game rules</a> · ` +
   `<a href="/terms">SMS terms</a> · <a href="/privacy">Privacy</a></p>`;
 
-// Top ranks get a playing-card badge: 1st = A, 2nd = K, 3rd = Q, 4th = J, 5th = 10.
-const RANK_CARDS = ['A', 'K', 'Q', 'J', '10'];
-function rankBadge(i: number): string {
-  const r = RANK_CARDS[i];
+// Ranks 1–13 get a playing-card badge (A down to 2); 14th+ falls back to a plain number.
+export function rankBadge(i: number): string {
+  const r = cardForRank(i);
   return r ? `<span class="card">${r}<small>♠</small></span>` : `${i + 1}`;
 }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pointsForPlace, crossedRewardThreshold } from '../src/lib/points';
+import { pointsForPlace, crossedRewardThreshold, cardForRank } from '../src/lib/points';
 
 describe('pointsForPlace', () => {
   it('awards 5·4·3·2·1 to the top five', () => {
@@ -8,6 +8,20 @@ describe('pointsForPlace', () => {
   it('awards 0 to 6th and beyond', () => {
     expect(pointsForPlace(5)).toBe(0);
     expect(pointsForPlace(10)).toBe(0);
+  });
+});
+
+describe('cardForRank', () => {
+  it('maps 1st place to the Ace', () => {
+    expect(cardForRank(0)).toBe('A');
+  });
+  it('runs the full deck down to the 2 at 13th place', () => {
+    expect(cardForRank(4)).toBe('10');
+    expect(cardForRank(12)).toBe('2');
+  });
+  it('returns null once the deck runs out (14th+)', () => {
+    expect(cardForRank(13)).toBeNull();
+    expect(cardForRank(20)).toBeNull();
   });
 });
 

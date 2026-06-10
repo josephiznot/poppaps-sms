@@ -8,6 +8,14 @@ export function pointsForPlace(zeroBasedIndex: number): number {
   return PLACE_POINTS[zeroBasedIndex] ?? 0;
 }
 
+/** Card ranks for the standings badges, best first: 1st = A … 13th = 2. */
+export const RANK_CARDS = ['A', 'K', 'Q', 'J', '10', '9', '8', '7', '6', '5', '4', '3', '2'] as const;
+
+/** Card label for a standings rank (zeroBasedIndex 0 = 1st place); null once the deck runs out (14th+). */
+export function cardForRank(zeroBasedIndex: number): string | null {
+  return RANK_CARDS[zeroBasedIndex] ?? null;
+}
+
 /** True if a visit count has crossed a "every N" reward threshold. */
 export function crossedRewardThreshold(visitCount: number, everyN: number): boolean {
   return everyN > 0 && visitCount > 0 && visitCount % everyN === 0;
