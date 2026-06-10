@@ -63,8 +63,10 @@ export async function optOutMember(db: D1Database, phone: string, now: string): 
 }
 
 export async function updateDisplayName(db: D1Database, phone: string, name: string, now: string): Promise<void> {
+  // Also clear awaiting_name: once the host sets a name, a later stray text
+  // from the member must not overwrite it via the JOIN name-capture path.
   await db
-    .prepare('UPDATE members SET display_name=?, updated_at=? WHERE phone=?')
+    .prepare('UPDATE members SET display_name=?, awaiting_name=0, updated_at=? WHERE phone=?')
     .bind(name, now, phone)
     .run();
 }
