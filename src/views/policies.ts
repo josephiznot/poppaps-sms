@@ -27,7 +27,7 @@ export function privacyPage(env: Env): Response {
     `<li>To track points and attendance for season standings, the quarterly tournament, and attendance promos.</li>` +
     `<li>To show your first name + last initial and point total on a public standings page.</li></ul>` +
     `<h2>Public standings</h2>` +
-    `<p>The standings page shows your first name + last initial and your points. We never display your full name, phone number, or other personal detail publicly. If you don't opt in, you aren't tracked or shown.</p>` +
+    `<p>The standings page shows your first name + last initial and your points. We never display your full name, phone number, or other personal detail publicly. If you never opt in, you aren't tracked or shown. If you opt out later, we stop texting you immediately; your past results may remain in the standings and season history — ask the host to remove them.</p>` +
     `<h2>What we don't do</h2><ul>` +
     `<li>We do not sell, rent, or trade your number or name.</li>` +
     `<li>We do not share your information with third parties for their own marketing.</li></ul>` +

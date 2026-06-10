@@ -92,6 +92,9 @@ regress.
   one-off championship; the new season starts clean at the next regular game.
 - FR-T6. Invite copy may mention **more generous prizes**; prize amounts are a
   lounge decision (not software, §2.5 / D6).
+- FR-T7. Tournament invites are sent **only to SUBSCRIBED members**; an opted-out
+  top-8 player keeps their seat in the season snapshot (marked `optedOut`) but is
+  **never texted** — enforced in the broadcast layer, surfaced in the admin UI.
 
 ### 2.5 Attendance & rewards
 - FR-W1. **Attendance is host-marked** on the post-game screen (tap who attended),

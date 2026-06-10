@@ -399,7 +399,7 @@ export async function recentResults(db: D1Database, limit: number): Promise<Rece
 export interface SeasonRow {
   id: string;
   closed_at: string;
-  snapshot: { invited?: Array<{ phone: string; name: string | null }>; gameId?: string | null; sent?: number };
+  snapshot: { invited?: Array<{ phone: string; name: string | null; optedOut?: boolean }>; gameId?: string | null; sent?: number };
 }
 
 /** Past seasons (each closed by a Special Players tournament), oldest first. */

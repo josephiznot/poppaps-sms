@@ -6,11 +6,36 @@ import { gameReminder, promoMessage } from './messages';
 import { crossedRewardThreshold } from './points';
 import { RECURRING, localDateInTz, addDaysToKey, seriesDatesBetween, zonedToUtcIso, gameLocalDates } from './schedule';
 
-/** Send a message to many phones sequentially (10DLC is ~1 msg/sec). */
+/** Split a phone list by membership in the subscribed set (pure; unit-tested). */
+export function partitionBySubscribed(
+  phones: string[],
+  subscribed: Set<string>,
+): { subscribed: string[]; optedOut: string[] } {
+  const ok: string[] = [];
+  const out: string[] = [];
+  for (const phone of phones) (subscribed.has(phone) ? ok : out).push(phone);
+  return { subscribed: ok, optedOut: out };
+}
+
+/**
+ * Send a message to many phones sequentially (10DLC is ~1 msg/sec).
+ * STOP compliance is enforced HERE: the list is intersected with currently
+ * subscribed members before anything is sent, so an opted-out number can never
+ * be texted even if a caller forgets to pre-filter. Callers may still
+ * pre-filter (for accurate counts/UI), but this helper enforces regardless.
+ */
 export async function broadcast(env: Env, phones: string[], message: string): Promise<{ sent: number; failed: number }> {
+  const subscribedSet = new Set(await db.listSubscribedPhones(env.DB));
+  const { subscribed: sendable, optedOut: skipped } = partitionBySubscribed(phones, subscribedSet);
+  if (skipped.length > 0) {
+    // Log last-4 only — never full numbers.
+    console.log(
+      JSON.stringify({ msg: 'broadcast skipped unsubscribed', skipped: skipped.length, last4: skipped.map((p) => p.slice(-4)) }),
+    );
+  }
   let sent = 0;
   let failed = 0;
-  for (const phone of phones) {
+  for (const phone of sendable) {
     try {
       await sendSms(env, phone, message);
       sent++;

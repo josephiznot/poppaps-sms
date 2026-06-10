@@ -248,15 +248,23 @@ admin.get('/tournament', async (c) => {
   const since = await db.lastSeasonClose(c.env.DB);
   const rows = await db.standings(c.env.DB, since);
   const games = (await db.listGames(c.env.DB)).filter((g) => g.is_tournament === 1);
+  const statusByPhone = new Map((await db.listMembers(c.env.DB)).map((m) => [m.phone, m.status]));
 
+  // Opted-out players stay checkable (they earned their snapshot seat) — the
+  // 🚫 is informational only; the backend guarantees no text goes out.
   const checkboxes = rows.length
     ? rows
-        .map(
-          (r, i) =>
+        .map((r, i) => {
+          const optedOut = statusByPhone.get(r.phone) !== 'SUBSCRIBED';
+          return (
             `<label class="row"><input type="checkbox" name="invite" value="${esc(r.phone)}"${i < 8 ? ' checked' : ''}> ` +
-            `#${i + 1} ${esc(r.display_name ?? r.phone)} <span class="muted">(${r.total} pts)</span></label>`,
-        )
-        .join('')
+            `#${i + 1} ${esc(r.display_name ?? r.phone)} <span class="muted">(${r.total} pts)</span>` +
+            (optedOut ? ` <span class="pill">🚫</span> <span class="muted">(opted out — won't be texted)</span>` : '') +
+            `</label>`
+          );
+        })
+        .join('') +
+      `<p class="muted">Players marked 🚫 have opted out of texts; they keep their seat in the snapshot but no invite SMS is sent.</p>`
     : `<p class="muted">No standings yet — nobody to invite.</p>`;
 
   const gameOptions =
@@ -283,19 +291,31 @@ admin.post('/tournament/run', async (c) => {
   const game = f.get('game_id') ? await db.getGame(c.env.DB, f.get('game_id')!) : null;
   const now = new Date().toISOString();
 
-  // Snapshot names before reset so the close record is self-contained.
-  const snapshot: Array<{ phone: string; name: string | null }> = [];
+  // Snapshot names before reset so the close record is self-contained. An
+  // opted-out player keeps their earned seat in the snapshot (honest history,
+  // shows on /seasons) but is NEVER texted — STOP compliance is authoritative
+  // here (and again inside broadcast as defense in depth).
+  const snapshot: Array<{ phone: string; name: string | null; optedOut?: boolean }> = [];
+  const toText: string[] = [];
   for (const phone of invited) {
     const m = await db.getMember(c.env.DB, phone);
-    snapshot.push({ phone, name: m?.display_name ?? null });
+    const entry: { phone: string; name: string | null; optedOut?: boolean } = { phone, name: m?.display_name ?? null };
+    if (m?.status === 'SUBSCRIBED') toText.push(phone);
+    else entry.optedOut = true;
+    snapshot.push(entry);
   }
+  const optedOutCount = invited.length - toText.length;
 
-  const res = await broadcast(c.env, invited, tournamentInvite(c.env, game));
+  const res = await broadcast(c.env, toText, tournamentInvite(c.env, game));
   await db.closeSeason(c.env.DB, { invited: snapshot, gameId: game?.id ?? null, sent: res.sent }, now);
 
+  const optedOutNote =
+    optedOutCount > 0
+      ? ` ${optedOutCount} top-8 player${optedOutCount === 1 ? ' has' : 's have'} opted out of texts and ${optedOutCount === 1 ? 'was' : 'were'} not messaged;`
+      : '';
   return layout(
     'Tournament started',
-    `<h1>🏆 Invites sent</h1><p class="ok">Invited ${res.sent} player(s); season reset.</p>` +
+    `<h1>🏆 Invites sent</h1><p class="ok">Invited ${res.sent} player(s);${optedOutNote} season reset.</p>` +
       `<p><a href="/admin/standings">View the fresh standings →</a></p>`,
     adminNav,
   );

@@ -29,8 +29,10 @@ through this program.
 
 The standings page shows your **first name + last initial** (e.g. "Mike R") and
 your points. We **never** display your full name, your phone number, or any other
-personal detail publicly. Opting in is what puts you on the board; if you don't
-opt in, you aren't tracked or shown.
+personal detail publicly. Opting in is what puts you on the board; if you never
+opt in, you aren't tracked or shown. If you opt out later, we stop texting you
+immediately; your past results may remain in the standings and season history —
+ask the host to remove them.
 
 ## What we don't do
 
