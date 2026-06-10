@@ -72,11 +72,18 @@ publicRoutes.get('/', async (c) => {
       `</ul>`
     : `<p class="muted">No games recorded yet.</p>`;
 
+  // Legend for the badge chips — only when at least one chip is actually on screen.
+  const hasChips = rows.some((r) => (badges[r.phone] ?? []).length > 0);
+  const badgeLegend = hasChips
+    ? `<p class="muted">🔥 Hot = top-5 in their last two games · ⚡ Comeback = back in the top 5 after a dry spell · ` +
+      `🃏 Regular = played the last 3 games · <a href="/rules">details</a></p>`
+    : '';
+
   const body =
     `<h1>${esc(c.env.PROGRAM_NAME)}</h1>` +
     hero +
     `<p class="muted">Points reset after each Special Players tournament — see <a href="/seasons">past seasons</a>.</p>` +
-    `<h2>Current season standings</h2>${standingsTable(rows, badges)}` +
+    `<h2>Current season standings</h2>${standingsTable(rows, badges)}${badgeLegend}` +
     `<h2>Recent games</h2><p class="muted">Tap a game to see its winners.</p>${recentHtml}` +
     footerLinks;
 

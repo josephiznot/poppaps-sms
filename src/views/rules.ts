@@ -57,6 +57,17 @@ export function rulesPage(env: Env): Response {
     `<li><strong>3rd place</strong> — <strong>1/6</strong> of the remaining pot.</li>` +
     `</ul>` +
 
+    `<h2>Player badges</h2>` +
+    `<p>Names on the <a href="/">standings board</a> can carry a badge:</p>` +
+    `<ul>` +
+    `<li><strong>🔥 Hot</strong> — finished in the top 5 in <strong>both of their last two games played</strong>.</li>` +
+    `<li><strong>⚡ Comeback</strong> — back in the top 5 in their <strong>last game played</strong> after ` +
+    `<strong>four or more games played without scoring</strong>. (A player is never both Hot and Comeback — Hot wins.)</li>` +
+    `<li><strong>🃏 Regular</strong> — played <strong>all of the last three game nights</strong> here at the lounge.</li>` +
+    `</ul>` +
+    `<p class="muted">Fine print: badges count <strong>regular game nights only</strong> — Special Players tournaments ` +
+    `and cancelled games don't count — and "played" means the host marked you as attended that night.</p>` +
+
     `<p class="muted" style="margin-top:2rem"><a href="/">← Standings</a> · <a href="/terms">SMS terms</a> · <a href="/privacy">Privacy</a></p>`;
 
   return layout(`Game Rules — ${env.PROGRAM_NAME}`, body, publicNav);

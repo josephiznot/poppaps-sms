@@ -135,6 +135,14 @@ regress.
 - FR-PUB5. A public **game page** (`/game/:id`) shows that game's placed finishers.
 - FR-PUB6. A public **seasons page** (`/seasons`) shows the current season plus past
   seasons' Special Players (top-8 snapshot) + champion (numbered chronologically).
+- FR-PUB7. **Player badges** on the standings (`lib/badges.ts`): **🔥 Hot** =
+  top-5 finish in the player's last 2+ played games; **⚡ Comeback** = top-5 in
+  their last played game after 4+ played games without scoring (mutually exclusive
+  with Hot — Hot wins); **🃏 Regular** = attended all of the venue's last 3
+  recorded games. "Played" = host-marked attendance; **tournament and cancelled
+  games are excluded** from badge history (`attendanceHistory`). A one-line legend
+  appears under the homepage standings **only when a badge is on screen**; the
+  full explanation lives on `/rules`.
 
 ### 2.8 Backfill
 - FR-B1. The host can enter **completed past games** (FR-AD1 past dates + FR-AD2
