@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 import type { Env, StandingRow } from '../types';
 import { layout, esc, publicNav } from '../lib/html';
 import { formatWhen } from '../lib/messages';
+import { formatUs } from '../lib/phone';
 import { privacyPage, termsPage } from '../views/policies';
 import { rulesPage } from '../views/rules';
 import { badgesForAll } from '../lib/badges';
@@ -52,6 +53,18 @@ publicRoutes.get('/', async (c) => {
   const recent = await db.recentResults(c.env.DB, 10);
   const badges = badgesForAll(await db.attendanceHistory(c.env.DB));
 
+  // Next-game banner — the auto-scheduler keeps the next biweekly game materialized.
+  const next = await db.nextUpcomingGame(c.env.DB, new Date().toISOString());
+  const joinLink =
+    `<a href="sms:${c.env.TWILIO_FROM_NUMBER}?&amp;body=JOIN" style="color:#f7f1e3">` +
+    `text JOIN to ${esc(formatUs(c.env.TWILIO_FROM_NUMBER))}</a>`;
+  const nextBanner = next
+    ? `<div class="hero"><span class="card">🗓</span>` +
+      `<div><strong>Next game: ${esc(formatWhen(next.starts_at, c.env.TIMEZONE))}</strong>` +
+      `${next.is_tournament ? ' <span class="pill">🏆 Special Players</span>' : ''}` +
+      `<div class="muted">${esc(next.location)} — ${joinLink} for a reminder</div></div></div>`
+    : '';
+
   const leader = rows[0];
   const hero = leader
     ? `<div class="hero"><span class="card">A<small>♠</small></span>` +
@@ -85,6 +98,7 @@ publicRoutes.get('/', async (c) => {
 
   const body =
     `<h1>${esc(c.env.PROGRAM_NAME)}</h1>` +
+    nextBanner +
     hero +
     `<p class="muted">Points reset after each Special Players tournament — see <a href="/seasons">past seasons</a>.</p>` +
     `<h2>Current season standings</h2>${standingsTable(rows, badges)}${badgeLegend}` +
