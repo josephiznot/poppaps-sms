@@ -101,3 +101,15 @@ export function formatWhen(iso: string, timeZone = 'America/Chicago'): string {
     timeZoneName: 'short',
   }).format(d);
 }
+
+/** Date only in the given time zone, e.g. "06/15/2026". */
+export function formatDateOnly(iso: string, timeZone = 'America/Chicago'): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
+}

@@ -55,6 +55,16 @@ const STYLE = `
   .muted { color: #6b6254; font-size: .9rem; }
   .pill { display: inline-block; padding: .05rem .5rem; border: 1px solid #c9bda6;
           border-radius: 1rem; font-size: .78rem; background: #fff; }
+  details.menu { position: relative; display: inline-block; }
+  details.menu summary { list-style: none; cursor: pointer; padding: .15rem .55rem;
+                         border: 1px solid #c9bda6; border-radius: .45rem;
+                         background: #f3ecdd; font-weight: 700; }
+  details.menu summary::-webkit-details-marker { display: none; }
+  details.menu .menu-body { position: absolute; right: 0; z-index: 5; margin-top: .25rem;
+                            display: grid; gap: .35rem; padding: .5rem; background: #fff;
+                            border: 1px solid #c9bda6; border-radius: .5rem;
+                            box-shadow: 0 6px 18px #0003; min-width: 8rem; }
+  details.menu .menu-body button { width: 100%; }
   .chip { display: inline-block; padding: .03rem .45rem; border: 1px solid #0c352733;
           border-radius: 1rem; font-size: .72rem; background: #0c35270d; color: #234d3d;
           margin-left: .35rem; white-space: nowrap; }

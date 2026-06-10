@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseIntent } from '../src/lib/messages';
+import { parseIntent, formatDateOnly } from '../src/lib/messages';
 
 describe('parseIntent', () => {
   it('detects opt-in keywords', () => {
@@ -28,5 +28,17 @@ describe('parseIntent', () => {
   it('classifies by the first word', () => {
     expect(parseIntent('stop spamming me')).toBe('OPT_OUT');
     expect(parseIntent('join the fun')).toBe('OPT_IN');
+  });
+});
+
+describe('formatDateOnly', () => {
+  it('formats MM/DD/YYYY in the given time zone', () => {
+    // 6:30 PM CDT on Mon Jun 15 = 23:30 UTC same day.
+    expect(formatDateOnly('2026-06-15T23:30:00.000Z', 'America/Chicago')).toBe('06/15/2026');
+  });
+
+  it('uses the local date when UTC has rolled to the next day', () => {
+    // 02:00 UTC Jun 16 is still 9:00 PM CDT Jun 15.
+    expect(formatDateOnly('2026-06-16T02:00:00.000Z', 'America/Chicago')).toBe('06/15/2026');
   });
 });

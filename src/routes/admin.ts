@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { deleteCookie } from 'hono/cookie';
 import type { Env, Member } from '../types';
 import { layout, adminNav, esc } from '../lib/html';
-import { formatWhen } from '../lib/messages';
+import { formatWhen, formatDateOnly } from '../lib/messages';
 import { pointsForPlace } from '../lib/points';
 import { setSession, requireAuth } from '../lib/auth';
 import { broadcast, awardRewardsForAttendees } from '../lib/jobs';
@@ -59,7 +59,7 @@ admin.get('/games', async (c) => {
   const games = await db.listGames(c.env.DB);
   const now = new Date().toISOString();
   const list = games.length
-    ? `<table><thead><tr><th>When</th><th>Where</th><th></th></tr></thead><tbody>` +
+    ? `<table><thead><tr><th>Date</th><th></th></tr></thead><tbody>` +
       games
         .map((g) => {
           const tag = g.cancelled
@@ -67,20 +67,24 @@ admin.get('/games', async (c) => {
             : g.is_tournament
               ? ' <span class="pill">🏆</span>'
               : '';
-          let action = g.cancelled
+          const primary = g.cancelled
             ? `<span class="muted">—</span>`
             : `<a href="/admin/games/${esc(g.id)}">Results →</a>`;
-          if (!g.cancelled && g.starts_at > now)
-            action +=
-              ` · <form method="post" action="/admin/games/${esc(g.id)}/cancel" style="display:inline">` +
-              `<button type="submit">Skip</button></form>`;
-          action +=
-            ` · <form method="post" action="/admin/games/${esc(g.id)}/delete" style="display:inline" ` +
+          const skip =
+            !g.cancelled && g.starts_at > now
+              ? `<form method="post" action="/admin/games/${esc(g.id)}/cancel">` +
+                `<button type="submit">Skip</button></form>`
+              : '';
+          const del =
+            `<form method="post" action="/admin/games/${esc(g.id)}/delete" ` +
             `onsubmit="return confirm('Delete this game and its results? This cannot be undone.')">` +
             `<button type="submit" class="danger">Delete</button></form>`;
+          const menu =
+            `<details class="menu"><summary aria-label="More actions">⋯</summary>` +
+            `<div class="menu-body">${skip}${del}</div></details>`;
           return (
-            `<tr><td>${esc(formatWhen(g.starts_at, c.env.TIMEZONE))}${tag}</td>` +
-            `<td>${esc(g.location)}</td><td>${action}</td></tr>`
+            `<tr><td>${esc(formatDateOnly(g.starts_at, c.env.TIMEZONE))}${tag}</td>` +
+            `<td>${primary} ${menu}</td></tr>`
           );
         })
         .join('') +
