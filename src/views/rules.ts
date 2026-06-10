@@ -3,7 +3,7 @@
  * anyone can see the game ahead of time (and it runs without the host present).
  */
 import type { Env } from '../types';
-import { layout } from '../lib/html';
+import { layout, publicNav } from '../lib/html';
 
 const BLINDS: Array<{ level: string; blinds: string; start: string }> = [
   { level: '1', blinds: '25 / 50', start: '6:30 PM' },
@@ -59,5 +59,5 @@ export function rulesPage(env: Env): Response {
 
     `<p class="muted" style="margin-top:2rem"><a href="/">← Standings</a> · <a href="/terms">SMS terms</a> · <a href="/privacy">Privacy</a></p>`;
 
-  return layout(`Game Rules — ${env.PROGRAM_NAME}`, body);
+  return layout(`Game Rules — ${env.PROGRAM_NAME}`, body, publicNav);
 }

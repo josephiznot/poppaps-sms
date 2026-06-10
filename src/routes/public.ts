@@ -6,6 +6,7 @@ import { layout, esc, publicNav } from '../lib/html';
 import { formatWhen } from '../lib/messages';
 import { privacyPage, termsPage } from '../views/policies';
 import { rulesPage } from '../views/rules';
+import { badgesForAll } from '../lib/badges';
 import * as db from '../lib/db';
 
 export const publicRoutes = new Hono<{ Bindings: Env }>();
@@ -21,16 +22,19 @@ function rankBadge(i: number): string {
   return r ? `<span class="card">${r}<small>♠</small></span>` : `${i + 1}`;
 }
 
-function standingsTable(rows: StandingRow[]): string {
+function standingsTable(rows: StandingRow[], badges: Record<string, string[]> = {}): string {
   if (!rows.length) return `<p class="muted">No points yet this season — check back after the next game.</p>`;
   return (
     `<table><thead><tr><th>Rank</th><th>Player</th><th style="text-align:right">Pts</th></tr></thead><tbody>` +
     rows
-      .map(
-        (r, i) =>
-          `<tr><td>${rankBadge(i)}</td><td>${esc(r.display_name ?? 'New player')}</td>` +
-          `<td style="text-align:right">${r.total}</td></tr>`,
-      )
+      .map((r, i) => {
+        const chips = (badges[r.phone] ?? []).map((b) => `<span class="chip">${b}</span>`).join('');
+        const cls = i < 3 ? ` class="r${i + 1}"` : '';
+        return (
+          `<tr${cls}><td>${rankBadge(i)}</td><td>${esc(r.display_name ?? 'New player')}${chips}</td>` +
+          `<td style="text-align:right">${r.total}</td></tr>`
+        );
+      })
       .join('') +
     `</tbody></table>`
   );
@@ -46,6 +50,14 @@ publicRoutes.get('/', async (c) => {
   const since = await db.lastSeasonClose(c.env.DB);
   const rows = await db.standings(c.env.DB, since);
   const recent = await db.recentResults(c.env.DB, 10);
+  const badges = badgesForAll(await db.attendanceHistory(c.env.DB));
+
+  const leader = rows[0];
+  const hero = leader
+    ? `<div class="hero"><span class="card">A<small>♠</small></span>` +
+      `<div><strong>${esc(leader.display_name ?? 'New player')}</strong> leads the season` +
+      `<div class="muted">${leader.total} pts — next game could change everything</div></div></div>`
+    : '';
 
   const recentHtml = recent.length
     ? `<ul>` +
@@ -62,8 +74,9 @@ publicRoutes.get('/', async (c) => {
 
   const body =
     `<h1>${esc(c.env.PROGRAM_NAME)}</h1>` +
+    hero +
     `<p class="muted">Points reset after each Special Players tournament — see <a href="/seasons">past seasons</a>.</p>` +
-    `<h2>Current season standings</h2>${standingsTable(rows)}` +
+    `<h2>Current season standings</h2>${standingsTable(rows, badges)}` +
     `<h2>Recent games</h2><p class="muted">Tap a game to see its winners.</p>${recentHtml}` +
     footerLinks;
 

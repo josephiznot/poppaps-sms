@@ -77,7 +77,7 @@ admin.get('/games', async (c) => {
           action +=
             ` · <form method="post" action="/admin/games/${esc(g.id)}/delete" style="display:inline" ` +
             `onsubmit="return confirm('Delete this game and its results? This cannot be undone.')">` +
-            `<button type="submit">Delete</button></form>`;
+            `<button type="submit" class="danger">Delete</button></form>`;
           return (
             `<tr><td>${esc(formatWhen(g.starts_at, c.env.TIMEZONE))}${tag}</td>` +
             `<td>${esc(g.location)}</td><td>${action}</td></tr>`

@@ -4,7 +4,7 @@
  * docs/privacy.md and docs/index.md.
  */
 import type { Env } from '../types';
-import { layout, esc } from '../lib/html';
+import { layout, esc, publicNav } from '../lib/html';
 import { formatUs } from '../lib/phone';
 
 const footer = (other: string, label: string) =>
@@ -39,7 +39,7 @@ export function privacyPage(env: Env): Response {
     `<h2>Contact</h2>` +
     `<p>Questions about this program or your data? Ask the host at Poppa P's, or reply HELP to any message.</p>` +
     footer('/terms', 'SMS terms');
-  return layout(`Privacy — ${env.PROGRAM_NAME}`, body);
+  return layout(`Privacy — ${env.PROGRAM_NAME}`, body, publicNav);
 }
 
 export function termsPage(env: Env): Response {
@@ -62,5 +62,5 @@ export function termsPage(env: Env): Response {
     `<h2>About the game</h2>` +
     `<p>A private, social game at the cigar lounge. Players buy cigars up front — and are ID'd at purchase — and compete for cigars at the table. No money is wagered and there are no cash payouts.</p>` +
     footer('/privacy', 'Privacy Policy');
-  return layout(`Terms — ${env.PROGRAM_NAME}`, body);
+  return layout(`Terms — ${env.PROGRAM_NAME}`, body, publicNav);
 }

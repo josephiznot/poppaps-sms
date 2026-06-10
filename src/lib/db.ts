@@ -227,6 +227,26 @@ export async function attendeesForGame(db: D1Database, gameId: string): Promise<
   return (r.results ?? []).map((x) => x.member_phone);
 }
 
+/**
+ * Chronological attendance + scoring history over regular (non-tournament,
+ * non-cancelled) games — feeds the public badge computation (lib/badges.ts).
+ */
+export async function attendanceHistory(
+  db: D1Database,
+): Promise<Array<{ member_phone: string; game_id: string; starts_at: string; points: number }>> {
+  const r = await db
+    .prepare(
+      `SELECT a.member_phone, a.game_id, g.starts_at, COALESCE(p.points, 0) AS points
+       FROM attendance a
+       JOIN games g ON g.id = a.game_id
+       LEFT JOIN points_ledger p ON p.game_id = a.game_id AND p.member_phone = a.member_phone
+       WHERE g.cancelled = 0 AND g.is_tournament = 0
+       ORDER BY g.starts_at ASC`,
+    )
+    .all<{ member_phone: string; game_id: string; starts_at: string; points: number }>();
+  return r.results ?? [];
+}
+
 /** Per-member games-attended counts, as { phone: count }. */
 export async function attendanceCounts(db: D1Database): Promise<Record<string, number>> {
   const r = await db
