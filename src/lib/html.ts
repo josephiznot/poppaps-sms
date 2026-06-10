@@ -82,6 +82,11 @@ const STYLE = `
   .hero .card { min-width: 2.3rem; font-size: 1.25rem; padding: .32rem .42rem; }
   .hero strong { font-family: Georgia, serif; font-size: 1.15rem; }
   .hero .muted { color: #cfe3d6; }
+  @media (max-width: 480px) {
+    .hero { padding: .6rem .75rem; gap: .6rem; margin-bottom: .9rem; }
+    .hero .card { min-width: 1.9rem; font-size: 1.05rem; padding: .25rem .35rem; }
+    .hero strong { font-size: 1.02rem; }
+  }
   .ok { color: #1d7a3f; } .warn { color: #a05a00; }
 `;
 

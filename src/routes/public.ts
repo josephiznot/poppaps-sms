@@ -66,12 +66,19 @@ publicRoutes.get('/', async (c) => {
       `msg &amp; data rates may apply · <a href="/terms" style="color:#f7f1e3">terms</a></div></div></div>`
     : '';
 
+  // One-line race note above the table (the gold A♠ row crowns the leader itself).
   const leader = rows[0];
-  const hero = leader
-    ? `<div class="hero"><span class="card">A<small>♠</small></span>` +
-      `<div><strong>${esc(leader.display_name ?? 'New player')}</strong> leads the season` +
-      `<div class="muted">${leader.total} pts — next game could change everything</div></div></div>`
-    : '';
+  const runnerUp = rows[1];
+  let raceLine = '';
+  if (leader && runnerUp) {
+    const gap = leader.total - runnerUp.total;
+    raceLine =
+      `<p class="muted"><strong>${esc(leader.display_name ?? 'New player')}</strong> leads — ` +
+      (gap === 0
+        ? `tied with ${esc(runnerUp.display_name ?? 'New player')}.`
+        : `${esc(runnerUp.display_name ?? 'New player')} is ${gap} back.`) +
+      `</p>`;
+  }
 
   const recentHtml = recent.length
     ? `<ul>` +
@@ -100,9 +107,10 @@ publicRoutes.get('/', async (c) => {
   const body =
     `<h1>${esc(c.env.PROGRAM_NAME)}</h1>` +
     nextBanner +
-    hero +
+    `<h2>Current season standings</h2>` +
+    raceLine +
+    `${standingsTable(rows, badges)}${badgeLegend}` +
     `<p class="muted">Points reset after each Special Players tournament — see <a href="/seasons">past seasons</a>.</p>` +
-    `<h2>Current season standings</h2>${standingsTable(rows, badges)}${badgeLegend}` +
     `<h2>Recent games</h2><p class="muted">Tap a game to see its winners.</p>${recentHtml}` +
     footerLinks;
 
