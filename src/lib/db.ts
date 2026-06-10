@@ -257,6 +257,30 @@ export async function attendanceHistory(
   return r.results ?? [];
 }
 
+/**
+ * One member's attended games for the current season (attendance recorded after
+ * `sinceIso`), INCLUDING tournaments — for the public profile page. Newest first;
+ * `points` is null when the member scored nothing that night.
+ */
+export async function playerSeasonHistory(
+  db: D1Database,
+  phone: string,
+  sinceIso: string,
+): Promise<Array<{ game_id: string; starts_at: string; is_tournament: number; points: number | null }>> {
+  const r = await db
+    .prepare(
+      `SELECT a.game_id, g.starts_at, g.is_tournament, p.points
+       FROM attendance a
+       JOIN games g ON g.id = a.game_id
+       LEFT JOIN points_ledger p ON p.game_id = a.game_id AND p.member_phone = a.member_phone
+       WHERE a.member_phone = ? AND g.cancelled = 0 AND a.created_at > ?
+       ORDER BY g.starts_at DESC`,
+    )
+    .bind(phone, sinceIso)
+    .all<{ game_id: string; starts_at: string; is_tournament: number; points: number | null }>();
+  return r.results ?? [];
+}
+
 /** Per-member games-attended counts, as { phone: count }. */
 export async function attendanceCounts(db: D1Database): Promise<Record<string, number>> {
   const r = await db

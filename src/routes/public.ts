@@ -8,7 +8,8 @@ import { formatUs } from '../lib/phone';
 import { privacyPage, termsPage } from '../views/policies';
 import { rulesPage } from '../views/rules';
 import { badgesForAll } from '../lib/badges';
-import { cardForRank } from '../lib/points';
+import { cardForRank, seasonStats } from '../lib/points';
+import { playerIdMap } from '../lib/playerId';
 import * as db from '../lib/db';
 
 export const publicRoutes = new Hono<{ Bindings: Env }>();
@@ -23,7 +24,11 @@ export function rankBadge(i: number): string {
   return r ? `<span class="card">${r}<small>♠</small></span>` : `${i + 1}`;
 }
 
-function standingsTable(rows: StandingRow[], badges: Record<string, string[]> = {}): string {
+function standingsTable(
+  rows: StandingRow[],
+  badges: Record<string, string[]> = {},
+  idByPhone?: Map<string, string>,
+): string {
   if (!rows.length) return `<p class="muted">No points yet this season — check back after the next game.</p>`;
   return (
     `<table><thead><tr><th>Rank</th><th>Player</th><th style="text-align:right">Pts</th></tr></thead><tbody>` +
@@ -31,8 +36,11 @@ function standingsTable(rows: StandingRow[], badges: Record<string, string[]> = 
       .map((r, i) => {
         const chips = (badges[r.phone] ?? []).map((b) => `<span class="chip">${b}</span>`).join('');
         const cls = i < 3 ? ` class="r${i + 1}"` : '';
+        const name = esc(r.display_name ?? 'New player');
+        const pid = idByPhone?.get(r.phone); // opaque hash id — never the phone (ADR-0005)
+        const nameHtml = pid ? `<a class="player" href="/player/${esc(pid)}">${name}</a>` : name;
         return (
-          `<tr${cls}><td>${rankBadge(i)}</td><td>${esc(r.display_name ?? 'New player')}${chips}</td>` +
+          `<tr${cls}><td>${rankBadge(i)}</td><td>${nameHtml}${chips}</td>` +
           `<td style="text-align:right">${r.total}</td></tr>`
         );
       })
@@ -52,6 +60,9 @@ publicRoutes.get('/', async (c) => {
   const rows = await db.standings(c.env.DB, since);
   const recent = await db.recentResults(c.env.DB, 10);
   const badges = badgesForAll(await db.attendanceHistory(c.env.DB));
+  // Opaque profile-link ids for the players on the board (phone → id).
+  const idMap = await playerIdMap(rows.map((r) => r.phone));
+  const idByPhone = new Map([...idMap].map(([id, phone]) => [phone, id]));
 
   // Next-game banner — the auto-scheduler keeps the next biweekly game materialized.
   const next = await db.nextUpcomingGame(c.env.DB, new Date().toISOString());
@@ -109,7 +120,7 @@ publicRoutes.get('/', async (c) => {
     nextBanner +
     `<h2>Current season standings</h2>` +
     raceLine +
-    `${standingsTable(rows, badges)}${badgeLegend}` +
+    `${standingsTable(rows, badges, idByPhone)}${badgeLegend}` +
     `<p class="muted">Points reset after each Special Players tournament — see <a href="/seasons">past seasons</a>.</p>` +
     `<h2>Recent games</h2><p class="muted">Tap a game to see its winners.</p>${recentHtml}` +
     footerLinks;
@@ -142,6 +153,62 @@ publicRoutes.get('/game/:id', async (c) => {
     `<p class="muted" style="margin-top:2rem"><a href="/">← Standings</a> · <a href="/seasons">Seasons</a></p>`;
 
   return layout(`Game ${when} — ${c.env.PROGRAM_NAME}`, body, publicNav);
+});
+
+// ---- a player's current-season profile --------------------------------------
+// URL ids are opaque SHA-256 hashes (lib/playerId.ts) — phones never appear in
+// public URLs or markup (privacy promise, ADR-0005 §3).
+
+publicRoutes.get('/player/:id', async (c) => {
+  const members = await db.listMembers(c.env.DB);
+  const ids = await playerIdMap(members.map((m) => m.phone));
+  const phone = ids.get(c.req.param('id'));
+  const member = phone ? members.find((m) => m.phone === phone) : undefined;
+  if (!phone || !member) {
+    return layout('Not found', `<h1>Player not found</h1><p><a href="/">← Standings</a></p>`, publicNav);
+  }
+
+  const since = await db.lastSeasonClose(c.env.DB);
+  const history = await db.playerSeasonHistory(c.env.DB, phone, since);
+  const stats = seasonStats(history);
+  const rank = (await db.standings(c.env.DB, since)).findIndex((r) => r.phone === phone);
+  const chips = (badgesForAll(await db.attendanceHistory(c.env.DB))[phone] ?? [])
+    .map((b) => `<span class="chip">${b}</span>`)
+    .join('');
+
+  const name = member.display_name ?? 'New player';
+  const statStrip =
+    `<div class="stats">` +
+    `<div class="stat"><strong>${stats.games}</strong><span>Games</span></div>` +
+    `<div class="stat"><strong>${stats.wins}</strong><span>Wins</span></div>` +
+    `<div class="stat"><strong>${stats.top5Rate}%</strong><span>Top-5 rate</span></div>` +
+    `<div class="stat"><strong>${stats.points}</strong><span>Points</span></div>` +
+    `</div>`;
+
+  const log = history.length
+    ? `<table><thead><tr><th>Date</th><th>Result</th><th style="text-align:right">Pts</th></tr></thead><tbody>` +
+      history
+        .map((g) => {
+          const pts = g.is_tournament ? 0 : (g.points ?? 0);
+          return (
+            `<tr><td><a href="/game/${esc(g.game_id)}">${esc(formatWhen(g.starts_at, c.env.TIMEZONE))}</a></td>` +
+            `<td>${placeLabel(pts)}${g.is_tournament ? ' <span class="pill">🏆 tournament</span>' : ''}</td>` +
+            `<td style="text-align:right">${pts}</td></tr>`
+          );
+        })
+        .join('') +
+      `</tbody></table>`
+    : `<p class="muted">No games this season yet.</p>`;
+
+  const body =
+    `<h1>${rank >= 0 ? `${rankBadge(rank)} ` : ''}${esc(name)}${chips}</h1>` +
+    statStrip +
+    `<h2>Game log</h2>${log}` +
+    `<p class="muted" style="margin-top:2rem">Season scope — resets at each Special Players tournament. ` +
+    `<a href="/seasons">Past seasons</a></p>` +
+    `<p class="muted"><a href="/">← Standings</a></p>`;
+
+  return layout(`${name} — ${c.env.PROGRAM_NAME}`, body, publicNav);
 });
 
 // ---- season history --------------------------------------------------------

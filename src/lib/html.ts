@@ -87,6 +87,13 @@ const STYLE = `
     .hero .card { min-width: 1.9rem; font-size: 1.05rem; padding: .25rem .35rem; }
     .hero strong { font-size: 1.02rem; }
   }
+  a.player { color: inherit; text-decoration: none; border-bottom: 1px dotted #6b625466; }
+  .stats { display: flex; gap: .6rem; flex-wrap: wrap; margin: .8rem 0 1rem; }
+  .stats .stat { background: #fff; border: 1px solid #c9bda6; border-radius: .6rem;
+                 padding: .45rem .85rem; text-align: center; min-width: 5.2rem; }
+  .stats .stat strong { display: block; font: 700 1.25rem Georgia, serif; color: #19342a; }
+  .stats .stat span { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em;
+                      color: #6b6254; }
   .ok { color: #1d7a3f; } .warn { color: #a05a00; }
 `;
 

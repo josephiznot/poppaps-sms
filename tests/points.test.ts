@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pointsForPlace, crossedRewardThreshold, cardForRank } from '../src/lib/points';
+import { pointsForPlace, crossedRewardThreshold, cardForRank, seasonStats } from '../src/lib/points';
 
 describe('pointsForPlace', () => {
   it('awards 5·4·3·2·1 to the top five', () => {
@@ -22,6 +22,31 @@ describe('cardForRank', () => {
   it('returns null once the deck runs out (14th+)', () => {
     expect(cardForRank(13)).toBeNull();
     expect(cardForRank(20)).toBeNull();
+  });
+});
+
+describe('seasonStats', () => {
+  it('returns zeros for an empty season', () => {
+    expect(seasonStats([])).toEqual({ games: 0, wins: 0, top5Rate: 0, points: 0 });
+  });
+
+  it('computes games, wins, top-5 rate, and points from mixed results', () => {
+    const rows = [
+      { is_tournament: 0, points: 5 }, // win
+      { is_tournament: 0, points: 3 }, // top-5
+      { is_tournament: 0, points: null }, // attended, no points row
+      { is_tournament: 0, points: 0 }, // attended, scored 0
+    ];
+    expect(seasonStats(rows)).toEqual({ games: 4, wins: 1, top5Rate: 50, points: 8 });
+  });
+
+  it('counts tournament rows as games but never as points', () => {
+    const rows = [
+      { is_tournament: 0, points: 5 },
+      { is_tournament: 1, points: null }, // tournaments award no season points (D5)
+      { is_tournament: 1, points: 5 }, // even a stray ledger row must not count
+    ];
+    expect(seasonStats(rows)).toEqual({ games: 3, wins: 1, top5Rate: 33, points: 5 });
   });
 });
 
