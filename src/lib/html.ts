@@ -58,6 +58,10 @@ const STYLE = `
   .chip { display: inline-block; padding: .03rem .45rem; border: 1px solid #0c352733;
           border-radius: 1rem; font-size: .72rem; background: #0c35270d; color: #234d3d;
           margin-left: .35rem; white-space: nowrap; }
+  .legend { list-style: none; padding: 0; margin: .5rem 0 0; display: grid; gap: .25rem;
+            font-size: .85rem; color: #6b6254; }
+  .legend li { display: flex; align-items: center; gap: .4rem; }
+  .legend .chip { margin-left: 0; }
   .card { display: inline-flex; align-items: center; justify-content: center; min-width: 1.75rem;
           padding: .1rem .32rem; border: 1px solid #00000038; border-radius: .35rem;
           background: #fff; color: #111; font: 700 .85rem/1 Georgia, serif;

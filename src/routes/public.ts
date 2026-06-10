@@ -75,8 +75,12 @@ publicRoutes.get('/', async (c) => {
   // Legend for the badge chips — only when at least one chip is actually on screen.
   const hasChips = rows.some((r) => (badges[r.phone] ?? []).length > 0);
   const badgeLegend = hasChips
-    ? `<p class="muted">🔥 Hot = top-5 in their last two games · ⚡ Comeback = back in the top 5 after a dry spell · ` +
-      `🃏 Regular = played the last 3 games · <a href="/rules">details</a></p>`
+    ? `<ul class="legend">` +
+      `<li><span class="chip">🔥 Hot</span> top-5 in their last two games</li>` +
+      `<li><span class="chip">⚡ Comeback</span> back in the top 5 after a dry spell</li>` +
+      `<li><span class="chip">🃏 Regular</span> played the last 3 games</li>` +
+      `<li><a href="/rules">details</a></li>` +
+      `</ul>`
     : '';
 
   const body =
