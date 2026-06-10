@@ -62,7 +62,8 @@ publicRoutes.get('/', async (c) => {
     ? `<div class="hero"><span class="card">🗓</span>` +
       `<div><strong>Next game: ${esc(formatWhen(next.starts_at, c.env.TIMEZONE))}</strong>` +
       `${next.is_tournament ? ' <span class="pill">🏆 Special Players</span>' : ''}` +
-      `<div class="muted">${esc(next.location)} — ${joinLink} for a reminder</div></div></div>`
+      `<div class="muted">${esc(next.location)} — ${joinLink} for a reminder · ` +
+      `msg &amp; data rates may apply · <a href="/terms" style="color:#f7f1e3">terms</a></div></div></div>`
     : '';
 
   const leader = rows[0];
