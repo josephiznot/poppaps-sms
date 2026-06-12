@@ -1,5 +1,5 @@
 /** D1 data access. All SQL lives here; routes/jobs call these. */
-import type { Member, Game, StandingRow, AwardedReward } from '../types';
+import type { Member, Game, StandingRow, AwardedReward, TournamentRsvp } from '../types';
 
 const uid = () => crypto.randomUUID();
 
@@ -199,21 +199,35 @@ export async function gameHasResults(db: D1Database, gameId: string): Promise<bo
   return (r?.c ?? 0) > 0;
 }
 
-export async function standings(db: D1Database, sinceIso: string): Promise<StandingRow[]> {
+/**
+ * Season standings. `untilIso` bounds the window from above (used to recompute
+ * a CLOSED season's ranking, e.g. "who was next in line after the top 8");
+ * omit it for the current season.
+ */
+export async function standings(db: D1Database, sinceIso: string, untilIso?: string): Promise<StandingRow[]> {
   const r = await db
     .prepare(
       `SELECT p.member_phone AS phone, m.display_name AS display_name,
               SUM(p.points) AS total, MAX(p.awarded_at) AS last_award
        FROM points_ledger p
        LEFT JOIN members m ON m.phone = p.member_phone
-       WHERE p.awarded_at > ?
+       WHERE p.awarded_at > ? AND p.awarded_at <= ?
        GROUP BY p.member_phone
        HAVING total > 0
        ORDER BY total DESC, last_award ASC`,
     )
-    .bind(sinceIso)
+    .bind(sinceIso, untilIso ?? '9999')
     .all<StandingRow>();
   return r.results ?? [];
+}
+
+/** The season close immediately before `beforeIso` (lower bound of that season). */
+export async function seasonCloseBefore(db: D1Database, beforeIso: string): Promise<string> {
+  const r = await db
+    .prepare('SELECT MAX(closed_at) AS c FROM seasons WHERE closed_at < ?')
+    .bind(beforeIso)
+    .first<{ c: string | null }>();
+  return r?.c ?? '';
 }
 
 // ---------------------------------------------------------------------------
@@ -317,11 +331,58 @@ export async function clearAttendanceForGame(db: D1Database, gameId: string): Pr
 // Seasons
 // ---------------------------------------------------------------------------
 
-export async function closeSeason(db: D1Database, snapshot: unknown, now: string): Promise<void> {
+export async function closeSeason(db: D1Database, snapshot: unknown, now: string): Promise<string> {
+  const id = uid();
   await db
     .prepare('INSERT INTO seasons (id, closed_at, snapshot) VALUES (?, ?, ?)')
-    .bind(uid(), now, JSON.stringify(snapshot))
+    .bind(id, now, JSON.stringify(snapshot))
     .run();
+  return id;
+}
+
+// ---------------------------------------------------------------------------
+// Tournament RSVPs — one row per invited player per season close; confirmed_at
+// set when the player replies IN. Backfill ("next in line") adds rows later.
+// ---------------------------------------------------------------------------
+
+/** Record an invite; idempotent per (season, member). */
+export async function createRsvp(db: D1Database, seasonId: string, phone: string, now: string): Promise<void> {
+  await db
+    .prepare(
+      'INSERT OR IGNORE INTO tournament_rsvps (id, season_id, member_phone, invited_at) VALUES (?, ?, ?, ?)',
+    )
+    .bind(uid(), seasonId, phone, now)
+    .run();
+}
+
+/** Confirm a seat (no-op if already confirmed — first confirmation wins). */
+export async function confirmRsvp(db: D1Database, id: string, now: string): Promise<void> {
+  await db
+    .prepare('UPDATE tournament_rsvps SET confirmed_at=? WHERE id=? AND confirmed_at IS NULL')
+    .bind(now, id)
+    .run();
+}
+
+/** This member's invite for the most recent season close, if any. */
+export async function rsvpForLatestSeason(db: D1Database, phone: string): Promise<TournamentRsvp | null> {
+  return db
+    .prepare(
+      `SELECT r.* FROM tournament_rsvps r
+       JOIN seasons s ON s.id = r.season_id
+       WHERE r.member_phone = ?
+         AND s.closed_at = (SELECT MAX(closed_at) FROM seasons)`,
+    )
+    .bind(phone)
+    .first<TournamentRsvp>();
+}
+
+/** All invites for one tournament (season close), in invite order. */
+export async function rsvpsForSeason(db: D1Database, seasonId: string): Promise<TournamentRsvp[]> {
+  const r = await db
+    .prepare('SELECT * FROM tournament_rsvps WHERE season_id=? ORDER BY invited_at ASC')
+    .bind(seasonId)
+    .all<TournamentRsvp>();
+  return r.results ?? [];
 }
 
 // ---------------------------------------------------------------------------
@@ -432,6 +493,12 @@ export interface SeasonRow {
   id: string;
   closed_at: string;
   snapshot: { invited?: Array<{ phone: string; name: string | null; optedOut?: boolean }>; gameId?: string | null; sent?: number };
+}
+
+/** The most recent season close (the current tournament's invite context), if any. */
+export async function latestSeason(db: D1Database): Promise<SeasonRow | null> {
+  const all = await listSeasons(db);
+  return all.length ? all[all.length - 1]! : null;
 }
 
 /** Past seasons (each closed by a Special Players tournament), oldest first. */

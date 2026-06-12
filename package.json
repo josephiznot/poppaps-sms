@@ -15,7 +15,9 @@
     "db:schema:remote": "wrangler d1 execute poker-sms --remote --file=./schema.sql",
     "db:seed:remote": "wrangler d1 execute poker-sms --remote --file=./seed.sql",
     "db:migrate:local": "wrangler d1 execute poker-sms --local --file=./migrations/0001_recurring_games.sql",
-    "db:migrate:remote": "wrangler d1 execute poker-sms --remote --file=./migrations/0001_recurring_games.sql"
+    "db:migrate:remote": "wrangler d1 execute poker-sms --remote --file=./migrations/0001_recurring_games.sql",
+    "db:migrate:0002:local": "wrangler d1 execute poker-sms --local --file=./migrations/0002_tournament_rsvps.sql",
+    "db:migrate:0002:remote": "wrangler d1 execute poker-sms --remote --file=./migrations/0002_tournament_rsvps.sql"
   },
   "dependencies": {
     "hono": "^4.6.3"

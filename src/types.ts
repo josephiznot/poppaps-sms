@@ -49,6 +49,14 @@ export interface StandingRow {
   last_award: string;
 }
 
+export interface TournamentRsvp {
+  id: string;
+  season_id: string;
+  member_phone: string;
+  invited_at: string;
+  confirmed_at: string | null;
+}
+
 export interface AwardedReward {
   id: string;
   member_phone: string;

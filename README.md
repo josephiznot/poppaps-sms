@@ -23,11 +23,11 @@ SMS goes out via Twilio's REST API. See [`docs/`](docs/) for the design + ADRs.
 
 | Route | Who | What |
 | --- | --- | --- |
-| `POST /sms` | Players (Twilio webhook) | JOIN / STOP / HELP + the one-step name reply. Signature-verified. |
+| `POST /sms` | Players (Twilio webhook) | JOIN / STOP / HELP, the one-step name reply, and IN to confirm a tournament seat. Signature-verified. |
 | `/admin/*` | Host (password) | Schedule games; post-game winners + attendance; standings; run tournament; roster + promos. |
 | `GET /` | Public | Season standings + recent winners (first name + last initial only). |
 | `GET /rules` `/terms` `/privacy` | Public | Game rules + blind structure; program terms; privacy policy. |
-| Cron `0 * * * *` | — | Hourly: keep the biweekly game on the calendar, then text reminders for games within the lead window. |
+| Cron `0 * * * *` | — | Hourly: keep the biweekly game on the calendar, then text reminders for games within the lead window (tournament games remind their invitees only). |
 
 ---
 
@@ -78,10 +78,13 @@ After the first deploy:
 Text **JOIN** to your number from your phone to test the whole loop.
 
 > **Upgrading an existing deployment?** When the schema changes, apply the new
-> migration to your live DB *before* (re)deploying — it's additive and safe to run once:
+> migration to your live DB *before* (re)deploying — migrations are additive and
+> safe to run once (each has its own script; run the ones added since your last
+> deploy):
 >
 > ```bash
-> npm run db:migrate:remote
+> npm run db:migrate:remote        # 0001 — recurring games
+> npm run db:migrate:0002:remote   # 0002 — tournament RSVPs
 > npm run deploy
 > ```
 
@@ -115,7 +118,12 @@ Real SMS sending still needs valid Twilio creds in `.dev.vars`; everything else
   5·4·3·2·1 points and fires any earned promos.
 - **Standings** — current season.
 - **Tournament** — top 8 are pre-checked (adjust to break any tie), send invites,
-  and the season resets (logical — nothing is deleted).
+  and the season resets (logical — nothing is deleted). Schedule the tournament
+  game **first** so the invite carries the date; optionally type a "confirm by"
+  deadline that goes in the text. Players reply **IN** to lock their seat; the
+  page tracks ✅ confirmed / ⏳ no reply and lists the **next players in line**
+  (last season's board) with a one-click backfill invite when you decide a seat
+  has gone unclaimed — seats are never reassigned automatically.
 - **Roster** — tidy display names; mark earned promos redeemed.
 
 ## What I need from you (credentials/config)

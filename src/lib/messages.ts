@@ -7,20 +7,27 @@
  */
 import type { Env, Game } from '../types';
 
-export type Intent = 'OPT_IN' | 'OPT_OUT' | 'HELP' | 'UNKNOWN';
+export type Intent = 'OPT_IN' | 'OPT_OUT' | 'HELP' | 'CONFIRM' | 'UNKNOWN';
 
 const OPT_IN_WORDS = new Set(['join', 'start', 'yes', 'subscribe', 'unstop', 'poker']);
 const OPT_OUT_WORDS = new Set([
   'stop', 'stopall', 'unsubscribe', 'cancel', 'end', 'quit', 'revoke', 'optout',
 ]);
 const HELP_WORDS = new Set(['help', 'info']);
+// Tournament-seat confirmation ("Reply IN to lock your seat"). Only meaningful
+// for a member with a pending invite — the webhook falls back to UNKNOWN
+// handling otherwise.
+const CONFIRM_WORDS = new Set(['in', 'confirm', 'confirmed']);
 
 /** Classify by first word, how carriers match keywords. */
 export function parseIntent(body: string | undefined | null): Intent {
-  const first = (body ?? '').trim().toLowerCase().split(/\s+/)[0] ?? '';
+  const text = (body ?? '').trim().toLowerCase();
+  const first = text.split(/\s+/)[0] ?? '';
   if (OPT_OUT_WORDS.has(first)) return 'OPT_OUT';
   if (OPT_IN_WORDS.has(first)) return 'OPT_IN';
   if (HELP_WORDS.has(first)) return 'HELP';
+  // "IN" / "In!" / "confirm", plus the natural "I'm in" / "im in" / "I am in".
+  if (CONFIRM_WORDS.has(first.replace(/[!.?]+$/, '')) || /^(i'?m|i am)\s+in\b/.test(text)) return 'CONFIRM';
   return 'UNKNOWN';
 }
 
@@ -71,13 +78,31 @@ export function gameReminder(env: Env, game: Game): string {
   return parts.join(' ');
 }
 
-export function tournamentInvite(env: Env, game: Game | null): string {
+/**
+ * Top-8 invite. `confirmBy` is a host-written soft deadline ("Friday") baked
+ * into the copy — the deadline lives in the message, not in code; the host
+ * decides when it has passed and backfills from the leaderboard.
+ */
+export function tournamentInvite(env: Env, game: Game | null, confirmBy?: string): string {
   const head = `${env.PROGRAM_NAME}: 🏆 You made the Special Players tournament — our biggest cigar prizes of the season!`;
-  if (game) {
-    const when = formatWhen(game.starts_at, env.TIMEZONE);
-    return `${head} ${when} at ${game.location}. Reply STOP to opt out.`;
-  }
-  return `${head} Details to come. Reply STOP to opt out.`;
+  const where = game ? `${formatWhen(game.starts_at, env.TIMEZONE)} at ${game.location}.` : 'Details to come.';
+  const by = confirmBy ? ` by ${confirmBy}` : '';
+  return `${head} ${where} Reply IN${by} to lock your seat — unclaimed seats go to the next player. Reply STOP to opt out.`;
+}
+
+/** Backfill invite to the next player on the closed season's leaderboard. */
+export function seatOpenedInvite(env: Env, game: Game | null): string {
+  const head = `${env.PROGRAM_NAME}: 🏆 A seat opened up in the Special Players tournament and you're next on the leaderboard!`;
+  const where = game ? `${formatWhen(game.starts_at, env.TIMEZONE)} at ${game.location}.` : 'Details to come.';
+  return `${head} ${where} Reply IN to claim your seat. Reply STOP to opt out.`;
+}
+
+/** Reply to IN — also re-sent if they confirm twice (harmless, reassuring). */
+export function rsvpConfirmedMessage(env: Env, game: Game | null): string {
+  const where = game
+    ? `See you ${formatWhen(game.starts_at, env.TIMEZONE)} at ${game.location}.`
+    : `We'll text the details soon.`;
+  return `${env.PROGRAM_NAME}: 🏆 Seat locked! ${where} Reply STOP to opt out.`;
 }
 
 export function promoMessage(env: Env, rewardText: string): string {

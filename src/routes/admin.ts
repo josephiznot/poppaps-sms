@@ -7,7 +7,7 @@ import { formatWhen, formatDateOnly } from '../lib/messages';
 import { pointsForPlace } from '../lib/points';
 import { setSession, requireAuth } from '../lib/auth';
 import { broadcast, awardRewardsForAttendees } from '../lib/jobs';
-import { tournamentInvite } from '../lib/messages';
+import { tournamentInvite, seatOpenedInvite } from '../lib/messages';
 import { RECURRING, zonedToUtcIso, gameLocalDates } from '../lib/schedule';
 import * as db from '../lib/db';
 
@@ -248,11 +248,94 @@ admin.get('/standings', async (c) => {
 
 // ---- tournament: pick 8, invite, reset ------------------------------------
 
+/**
+ * RSVP tracker for the latest tournament (ADR-0006): who confirmed (replied
+ * IN), who hasn't, who's next in line on the CLOSED season's leaderboard with
+ * a one-click backfill invite. Returns '' once the tournament has happened
+ * (or after 45 days if no game was ever attached).
+ */
+async function rsvpTrackerHtml(env: Env, members: Member[]): Promise<string> {
+  const season = await db.latestSeason(env.DB);
+  if (!season) return '';
+  const rsvps = await db.rsvpsForSeason(env.DB, season.id);
+  if (rsvps.length === 0) return ''; // pre-RSVP season close (or nobody texted)
+
+  const nowIso = new Date().toISOString();
+  const game = season.snapshot.gameId ? await db.getGame(env.DB, season.snapshot.gameId) : null;
+  const staleNoGame = !game && Date.now() - new Date(season.closed_at).getTime() > 45 * 86400_000;
+  if ((game && game.starts_at <= nowIso) || staleNoGame) return '';
+
+  const nameByPhone = new Map(members.map((m) => [m.phone, m.display_name]));
+  const statusByPhone = new Map(members.map((m) => [m.phone, m.status]));
+  const snapshotInvited = season.snapshot.invited ?? [];
+  const nameOf = (phone: string) =>
+    nameByPhone.get(phone) ?? snapshotInvited.find((i) => i.phone === phone)?.name ?? phone;
+
+  // Snapshot order first (the original top 8), then backfills in invite order.
+  const rsvpByPhone = new Map(rsvps.map((r) => [r.member_phone, r]));
+  const ordered = [
+    ...snapshotInvited.map((i) => i.phone),
+    ...rsvps.map((r) => r.member_phone).filter((p) => !snapshotInvited.some((i) => i.phone === p)),
+  ];
+
+  let confirmed = 0;
+  const rows = ordered
+    .map((phone) => {
+      const rsvp = rsvpByPhone.get(phone);
+      let status: string;
+      if (!rsvp) {
+        status = `<span class="pill">🚫</span> <span class="muted">opted out — not texted</span>`;
+      } else if (rsvp.confirmed_at) {
+        confirmed++;
+        status = `<span class="pill">✅</span> confirmed ${esc(formatDateOnly(rsvp.confirmed_at, env.TIMEZONE))}`;
+      } else {
+        status = `<span class="pill">⏳</span> <span class="muted">no reply yet</span>`;
+      }
+      return `<tr><td>${esc(nameOf(phone))}</td><td>${status}</td></tr>`;
+    })
+    .join('');
+
+  // Next in line = the closed season's standings below the already-invited.
+  const prevClose = await db.seasonCloseBefore(env.DB, season.closed_at);
+  const closedStandings = await db.standings(env.DB, prevClose, season.closed_at);
+  const alreadyInvited = new Set(ordered);
+  const nextUp = closedStandings
+    .map((r, i) => ({ ...r, rank: i + 1 }))
+    .filter((r) => !alreadyInvited.has(r.phone))
+    .slice(0, 5);
+
+  const nextRows = nextUp.length
+    ? nextUp
+        .map((r) => {
+          const optedOut = statusByPhone.get(r.phone) !== 'SUBSCRIBED';
+          const action = optedOut
+            ? `<span class="muted">🚫 opted out</span>`
+            : `<form method="post" action="/admin/tournament/backfill">` +
+              `<input type="hidden" name="phone" value="${esc(r.phone)}">` +
+              `<button type="submit">Send invite</button></form>`;
+          return `<tr><td>#${r.rank} ${esc(r.display_name ?? r.phone)} <span class="muted">(${r.total} pts)</span></td><td>${action}</td></tr>`;
+        })
+        .join('')
+    : `<tr><td colspan="2" class="muted">Nobody left on last season's board.</td></tr>`;
+
+  const when = game ? ` — ${esc(formatWhen(game.starts_at, env.TIMEZONE))}` : '';
+  return (
+    `<h2>Seat confirmations${when}</h2>` +
+    `<p class="muted">${confirmed} of ${ordered.length} confirmed. Invitees reply <strong>IN</strong> to lock their seat. ` +
+    `When you decide a seat has gone unclaimed, invite the next player below — the system never gives a seat away on its own.</p>` +
+    `<table><tbody>${rows}</tbody></table>` +
+    `<h3>Next in line (last season's board)</h3>` +
+    `<table><tbody>${nextRows}</tbody></table>`
+  );
+}
+
 admin.get('/tournament', async (c) => {
   const since = await db.lastSeasonClose(c.env.DB);
   const rows = await db.standings(c.env.DB, since);
   const games = (await db.listGames(c.env.DB)).filter((g) => g.is_tournament === 1);
-  const statusByPhone = new Map((await db.listMembers(c.env.DB)).map((m) => [m.phone, m.status]));
+  const members = await db.listMembers(c.env.DB);
+  const statusByPhone = new Map(members.map((m) => [m.phone, m.status]));
+  const tracker = await rsvpTrackerHtml(c.env, members);
 
   // Opted-out players stay checkable (they earned their snapshot seat) — the
   // 🚫 is informational only; the backend guarantees no text goes out.
@@ -275,16 +358,46 @@ admin.get('/tournament', async (c) => {
     `<option value="">(no specific game)</option>` +
     games.map((g) => `<option value="${esc(g.id)}">${esc(formatWhen(g.starts_at, c.env.TIMEZONE))} — ${esc(g.location)}</option>`).join('');
 
+  const nowIso = new Date().toISOString();
+  const hasUpcomingTournamentGame = games.some((g) => !g.cancelled && g.starts_at > nowIso);
+  const scheduleTip = hasUpcomingTournamentGame
+    ? ''
+    : `<p class="muted">💡 Schedule the tournament game first (<a href="/admin/games">Games</a>, tournament toggle) ` +
+      `so the invite carries the date and "confirm by" makes sense to players.</p>`;
+
   const body =
     `<h1>Special Players tournament</h1>` +
+    tracker +
+    `<h2>Run a new tournament</h2>` +
     `<p class="muted">Top 8 are pre-checked. Adjust to break any tie, then send invites. ` +
     `This <strong>resets the season</strong> (logical — nothing is deleted).</p>` +
+    scheduleTip +
     `<form class="stack" method="post" action="/admin/tournament/run">` +
     `<label>Tournament game (optional)<select name="game_id">${gameOptions}</select></label>` +
+    `<label>Confirm by (optional, goes in the text — e.g. "Friday")` +
+    `<input type="text" name="confirm_by" maxlength="40" placeholder="Friday"></label>` +
     checkboxes +
     `<button class="primary" type="submit">Send invites &amp; reset season</button></form>`;
 
   return layout('Tournament', body, adminNav);
+});
+
+// Backfill: text the next player on the closed season's board and add them to
+// the RSVP roster. Host-initiated only — no automated seat reassignment.
+admin.post('/tournament/backfill', async (c) => {
+  const f = new URLSearchParams(await c.req.text());
+  const phone = f.get('phone');
+  const season = await db.latestSeason(c.env.DB);
+  if (!phone || !season) return c.redirect('/admin/tournament');
+
+  const member = await db.getMember(c.env.DB, phone);
+  if (member?.status !== 'SUBSCRIBED') return c.redirect('/admin/tournament');
+
+  const game = season.snapshot.gameId ? await db.getGame(c.env.DB, season.snapshot.gameId) : null;
+  const now = new Date().toISOString();
+  await broadcast(c.env, [phone], seatOpenedInvite(c.env, game));
+  await db.createRsvp(c.env.DB, season.id, phone, now);
+  return c.redirect('/admin/tournament');
 });
 
 admin.post('/tournament/run', async (c) => {
@@ -310,8 +423,12 @@ admin.post('/tournament/run', async (c) => {
   }
   const optedOutCount = invited.length - toText.length;
 
-  const res = await broadcast(c.env, toText, tournamentInvite(c.env, game));
-  await db.closeSeason(c.env.DB, { invited: snapshot, gameId: game?.id ?? null, sent: res.sent }, now);
+  const confirmBy = (f.get('confirm_by') ?? '').trim();
+  const res = await broadcast(c.env, toText, tournamentInvite(c.env, game, confirmBy || undefined));
+  const seasonId = await db.closeSeason(c.env.DB, { invited: snapshot, gameId: game?.id ?? null, sent: res.sent }, now);
+  // RSVP rows only for players actually texted — opted-out seats stay in the
+  // snapshot (honest history) but can't be confirmed by SMS.
+  for (const phone of toText) await db.createRsvp(c.env.DB, seasonId, phone, now);
 
   const optedOutNote =
     optedOutCount > 0
@@ -320,6 +437,8 @@ admin.post('/tournament/run', async (c) => {
   return layout(
     'Tournament started',
     `<h1>🏆 Invites sent</h1><p class="ok">Invited ${res.sent} player(s);${optedOutNote} season reset.</p>` +
+      `<p>Players reply <strong>IN</strong> to lock their seat — track confirmations on the ` +
+      `<a href="/admin/tournament">Tournament page</a>.</p>` +
       `<p><a href="/admin/standings">View the fresh standings →</a></p>`,
     adminNav,
   );

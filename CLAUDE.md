@@ -17,11 +17,16 @@ page**, all built for **minimal effort**.
   `POST /sms` (Twilio webhook), `/admin/*` (host web app, password-gated), `GET /`
   (public standings), plus an hourly reminder cron. The previous AWS SAM scaffold
   has been **removed**.
-- **Not deployed yet** — needs a Cloudflare account + D1 + Twilio secrets (see
-  README "Setup & deploy"). Verified locally: typecheck, vitest, and a
-  `wrangler dev` smoke test of the SMS, admin, and public flows.
+- **LIVE in production** at **https://poppaps.cards** (Cloudflare custom domain;
+  also reachable at `*.workers.dev`). Real players are subscribed — schema changes
+  need an additive migration in `migrations/` applied to the remote D1 **before**
+  `npm run deploy` (see README "Upgrading an existing deployment").
 - Architecture decisions live in **[docs/adr/](docs/adr/)**; the consolidated spec
   is **[docs/requirements.md](docs/requirements.md)** — read before changing features.
+- **Keep capability docs in sync (standing rule):** any feature/behavior change
+  must update the capability docs in the same commit — this file (roadmap +
+  relevant section), `docs/requirements.md`, and a new/updated ADR if a decision
+  was made. README too if commands or host workflow changed.
 
 ## Domain model (target, ledger-oriented — see ADR-0002/0004)
 
@@ -53,10 +58,19 @@ surfaces the **top 8 players by points** (`SUM(points)` over the scoring window,
 in Central Time) so the host can invite them via targeted broadcast to a special
 game on an off week.
 
+**Seat RSVPs (ADR-0006):** invitees reply **IN** to lock their seat (idempotent;
+a bare YES from a pending invitee also confirms). The invite carries a
+host-written soft deadline ("Reply IN by Friday…") — never enforced in code. The
+admin Tournament page tracks ✅/⏳/🚫 per invitee and offers one-click backfill
+invites to the **next players on the closed season's board**; the system never
+reassigns a seat on its own. Tournament-game reminders go to the **invited
+roster only**, never the whole list (`tournament_rsvps` table).
+
 ## Interaction surfaces (ADR-0005)
 
 - **SMS = players only.** Out: reminders, tournament invites, promos. In:
-  JOIN / STOP / HELP + the JOIN name-capture reply. **No admin over SMS.**
+  JOIN / STOP / HELP + the JOIN name-capture reply + IN (tournament-seat
+  confirm, ADR-0006). **No admin over SMS.**
 - **Admin = web app** on the same Worker, **password-gated** (`ADMIN_PASSWORD`;
   Cloudflare Access optional in prod): schedule games (one per day; Skip or Delete
   — delete also removes that game's points + attendance), post-game (winners +
@@ -77,6 +91,8 @@ game on an off week.
    public standings). (ADR-0002, ADR-0005)
 4. **Special Players tournament** — ✅ built (admin: top-8 → invite → logical
    season reset). (ADR-0002)
+   - **Seat RSVPs** — ✅ built (reply IN to confirm; admin tracker + host-paced
+     next-in-line backfill; invitee-only tournament reminders). (ADR-0006)
 5. **Rewards / attendance** — ✅ mechanism built (host-marked attendance →
    data-driven promos via SMS); concrete reward rules still forming —
    `seed.sql` has a placeholder. (ADR-0004)
@@ -154,4 +170,5 @@ tests/                   Vitest unit tests (messages, phone, points, schedule)
 See **[docs/adr/](docs/adr/)** and **[docs/requirements.md](docs/requirements.md)**
 (consolidated spec). ADRs: `0001` platform, `0002` data model & points, `0003`
 SMS admin *(superseded)*, `0004` rewards & attendance, `0005` interaction channels
-(SMS players-only + web admin + public board).
+(SMS players-only + web admin + public board), `0006` tournament RSVPs
+(IN confirm + host-paced backfill).

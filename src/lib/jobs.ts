@@ -76,7 +76,14 @@ export async function ensureUpcomingGames(env: Env, now = new Date()): Promise<n
   return created;
 }
 
-/** Cron job: remind subscribers about games starting within the lead window. */
+/**
+ * Cron job: remind subscribers about games starting within the lead window.
+ * Regular games go to the whole subscribed list; a Special Players tournament
+ * is invite-only, so its reminder goes ONLY to the invited players (the RSVP
+ * roster of the season whose close attached this game). If no invites are
+ * linked to a tournament game, nobody is reminded — better silent than leaking
+ * an open invitation to the whole roster.
+ */
 export async function sendDueReminders(env: Env, now = new Date()): Promise<{ games: number; sent: number }> {
   const leadHours = Number(env.REMINDER_LEAD_HOURS || '24');
   const cutoff = new Date(now.getTime() + leadHours * 3600 * 1000);
@@ -86,10 +93,21 @@ export async function sendDueReminders(env: Env, now = new Date()): Promise<{ ga
   const phones = await db.listSubscribedPhones(env.DB);
   let sent = 0;
   for (const game of games) {
-    const res = await broadcast(env, phones, gameReminder(env, game));
+    let recipients = phones;
+    if (game.is_tournament) {
+      const season = (await db.listSeasons(env.DB)).find((s) => s.snapshot.gameId === game.id);
+      const rsvps = season ? await db.rsvpsForSeason(env.DB, season.id) : [];
+      recipients = rsvps.map((r) => r.member_phone);
+      if (recipients.length === 0) {
+        console.log(JSON.stringify({ msg: 'tournament reminder skipped — no linked invites', gameId: game.id }));
+        await db.markReminderSent(env.DB, game.id);
+        continue;
+      }
+    }
+    const res = await broadcast(env, recipients, gameReminder(env, game));
     sent += res.sent;
     await db.markReminderSent(env.DB, game.id);
-    console.log(JSON.stringify({ msg: 'reminder sent', gameId: game.id, ...res }));
+    console.log(JSON.stringify({ msg: 'reminder sent', gameId: game.id, tournament: !!game.is_tournament, ...res }));
   }
   return { games: games.length, sent };
 }

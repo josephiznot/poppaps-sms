@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { parseIntent, formatDateOnly } from '../src/lib/messages';
+import { parseIntent, formatDateOnly, tournamentInvite, seatOpenedInvite } from '../src/lib/messages';
+import type { Env, Game } from '../src/types';
 
 describe('parseIntent', () => {
   it('detects opt-in keywords', () => {
@@ -28,6 +29,47 @@ describe('parseIntent', () => {
   it('classifies by the first word', () => {
     expect(parseIntent('stop spamming me')).toBe('OPT_OUT');
     expect(parseIntent('join the fun')).toBe('OPT_IN');
+  });
+
+  it('detects tournament-seat confirmations', () => {
+    for (const w of ['IN', 'in', 'In!', 'confirm', 'CONFIRMED', "I'm in", 'im in', 'I am in!']) {
+      expect(parseIntent(w)).toBe('CONFIRM');
+    }
+  });
+
+  it('does not confuse confirmations with similar words', () => {
+    expect(parseIntent('info')).toBe('HELP'); // 'info' ≠ 'in'
+    expect(parseIntent('Ingrid B')).toBe('UNKNOWN'); // name reply, not IN
+    expect(parseIntent('inside straight')).toBe('UNKNOWN');
+  });
+
+  it('keeps carrier keywords winning over confirmation', () => {
+    expect(parseIntent('stop')).toBe('OPT_OUT');
+    expect(parseIntent('yes')).toBe('OPT_IN'); // YES stays opt-in; webhook special-cases invitees
+  });
+});
+
+describe('tournament invite copy', () => {
+  const env = { PROGRAM_NAME: "Poppa P's Poker Night", TIMEZONE: 'America/Chicago' } as Env;
+  const game = { starts_at: '2026-06-20T23:30:00.000Z', location: "Poppa P's" } as Game;
+
+  it('asks for an IN reply with the host deadline baked into the copy', () => {
+    const msg = tournamentInvite(env, game, 'Friday');
+    expect(msg).toContain('Reply IN by Friday to lock your seat');
+    expect(msg).toContain("at Poppa P's");
+    expect(msg).toContain('Reply STOP'); // compliance line stays
+  });
+
+  it('omits the deadline when the host leaves it blank', () => {
+    expect(tournamentInvite(env, game)).toContain('Reply IN to lock your seat');
+    expect(tournamentInvite(env, null)).toContain('Details to come.');
+  });
+
+  it('backfill invite asks for IN and keeps STOP', () => {
+    const msg = seatOpenedInvite(env, game);
+    expect(msg).toContain('seat opened up');
+    expect(msg).toContain('Reply IN to claim your seat');
+    expect(msg).toContain('Reply STOP');
   });
 });
 

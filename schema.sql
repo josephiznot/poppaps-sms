@@ -61,6 +61,19 @@ CREATE TABLE IF NOT EXISTS seasons (
   snapshot  TEXT NOT NULL
 );
 
+-- Tournament invite RSVPs. One row per invited player per season close;
+-- confirmed_at set when the player replies IN (NULL = no reply). Host-paced
+-- backfill ("next in line") adds rows to the same season after the close.
+CREATE TABLE IF NOT EXISTS tournament_rsvps (
+  id           TEXT PRIMARY KEY,
+  season_id    TEXT NOT NULL,
+  member_phone TEXT NOT NULL,
+  invited_at   TEXT NOT NULL,
+  confirmed_at TEXT,
+  UNIQUE(season_id, member_phone)
+);
+CREATE INDEX IF NOT EXISTS idx_rsvps_season ON tournament_rsvps(season_id);
+
 CREATE TABLE IF NOT EXISTS reward_rules (
   id             TEXT PRIMARY KEY,
   every_n_visits INTEGER NOT NULL,
