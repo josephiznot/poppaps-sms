@@ -6,6 +6,7 @@
  * apply", STOP/HELP) is load-bearing — edit wording, keep those bits.
  */
 import type { Env, Game } from '../types';
+import { RECURRING, to12h } from './schedule';
 
 export type Intent = 'OPT_IN' | 'OPT_OUT' | 'HELP' | 'CONFIRM' | 'UNKNOWN';
 
@@ -45,8 +46,9 @@ export function askNameMessage(env: Env): string {
 export function nameConfirmedMessage(env: Env, name: string): string {
   const link = env.PUBLIC_BASE_URL ? ` Standings: ${env.PUBLIC_BASE_URL}/` : '';
   return (
-    `Thanks ${name}! We'll text you a reminder before each game at Poppa P's, ` +
-    `plus the occasional promo.${link} Reply STOP to cancel.`
+    `Thanks ${name}! Games are every other week — cards fly ${to12h(RECURRING.time)} Central ` +
+    `at Poppa P's. We'll text a reminder before each one, plus the occasional promo.` +
+    `${link} Reply STOP to cancel.`
   );
 }
 
@@ -71,7 +73,7 @@ export function unknownMessage(env: Env): string {
 
 export function gameReminder(env: Env, game: Game): string {
   const when = formatWhen(game.starts_at, env.TIMEZONE);
-  const parts = [`${env.PROGRAM_NAME}: 🃏 Game ${when} at ${game.location}.`];
+  const parts = [`${env.PROGRAM_NAME}: 🃏 Cards fly ${when} at ${game.location}.`];
   if (game.buy_in) parts.push(`Buy-in: ${game.buy_in}.`);
   if (game.description) parts.push(game.description);
   parts.push('Reply STOP to opt out.');

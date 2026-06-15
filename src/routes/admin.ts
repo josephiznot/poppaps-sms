@@ -8,7 +8,7 @@ import { pointsForPlace } from '../lib/points';
 import { setSession, requireAuth } from '../lib/auth';
 import { broadcast, awardRewardsForAttendees } from '../lib/jobs';
 import { tournamentInvite, seatOpenedInvite, formatConfirmBy } from '../lib/messages';
-import { RECURRING, zonedToUtcIso, gameLocalDates, localDateInTz } from '../lib/schedule';
+import { RECURRING, to12h, zonedToUtcIso, gameLocalDates, localDateInTz } from '../lib/schedule';
 import * as db from '../lib/db';
 
 export const admin = new Hono<{ Bindings: Env }>();
@@ -510,12 +510,4 @@ admin.post('/rewards/redeem', async (c) => {
 
 function ordinal(n: number): string {
   return ['1st', '2nd', '3rd', '4th', '5th'][n - 1] ?? `${n}th`;
-}
-
-/** "18:30" -> "6:30 PM". */
-function to12h(hhmm: string): string {
-  const [h = 0, m = 0] = hhmm.split(':').map(Number);
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  const h12 = ((h + 11) % 12) + 1;
-  return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
 }

@@ -22,6 +22,14 @@ export const RECURRING = {
 
 import type { Game } from '../types';
 
+/** Format a 24h "HH:MM" wall time as 12h, e.g. "18:30" -> "6:30 PM". */
+export function to12h(hhmm: string): string {
+  const [h = 0, m = 0] = hhmm.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = ((h + 11) % 12) + 1;
+  return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+
 /** Local dates (YYYY-MM-DD) already occupied by games — for one-game-per-day rules. */
 export function gameLocalDates(games: Game[], timeZone: string, includeCancelled = false): Set<string> {
   const out = new Set<string>();

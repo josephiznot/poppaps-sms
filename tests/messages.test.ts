@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseIntent, formatDateOnly, tournamentInvite, seatOpenedInvite, formatConfirmBy } from '../src/lib/messages';
+import { parseIntent, formatDateOnly, tournamentInvite, seatOpenedInvite, formatConfirmBy, gameReminder, nameConfirmedMessage } from '../src/lib/messages';
 import type { Env, Game } from '../src/types';
 
 describe('parseIntent', () => {
@@ -81,6 +81,30 @@ describe('tournament invite copy', () => {
     expect(msg).toContain('seat opened up');
     expect(msg).toContain('Reply IN to claim your seat');
     expect(msg).toContain('Reply STOP');
+  });
+});
+
+describe('game reminder copy', () => {
+  const env = { PROGRAM_NAME: "Poppa P's Poker Night", TIMEZONE: 'America/Chicago' } as Env;
+  // 6:30 PM CDT on Mon Jun 15 = 23:30 UTC same day.
+  const game = { starts_at: '2026-06-15T23:30:00.000Z', location: "Poppa P's Smoke Shoppe & Lounge" } as Game;
+
+  it('says "Cards fly" and keeps the location + STOP line', () => {
+    const msg = gameReminder(env, game);
+    expect(msg).toContain('Cards fly');
+    expect(msg).toContain("Poppa P's Smoke Shoppe & Lounge");
+    expect(msg).toContain('Reply STOP to opt out.');
+  });
+});
+
+describe('welcome (name-confirmed) copy', () => {
+  const env = { PROGRAM_NAME: "Poppa P's Poker Night", TIMEZONE: 'America/Chicago' } as Env;
+
+  it('states the standard 6:30 PM Central start and keeps the STOP line', () => {
+    const msg = nameConfirmedMessage(env, 'Smoke T');
+    expect(msg).toContain('6:30 PM');
+    expect(msg).toContain('Central');
+    expect(msg).toContain('Reply STOP to cancel.');
   });
 });
 
