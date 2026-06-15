@@ -67,7 +67,15 @@ export function helpMessage(env: Env): string {
   );
 }
 
-export function unknownMessage(env: Env): string {
+/**
+ * Catch-all reply for unrecognized inbound text. Tailored by subscription:
+ * an already-subscribed member isn't told to JOIN (they're in); a non-member
+ * or opted-out number is. STOP + HELP are offered to everyone (compliance).
+ */
+export function unknownMessage(env: Env, subscribed = false): string {
+  if (subscribed) {
+    return `${env.PROGRAM_NAME}: You're already on the list for game reminders. Reply HELP for info or STOP to unsubscribe.`;
+  }
   return `${env.PROGRAM_NAME}: Reply JOIN for game reminders, HELP for info, or STOP to unsubscribe.`;
 }
 

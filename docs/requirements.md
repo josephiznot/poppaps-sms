@@ -48,7 +48,10 @@ regress.
 
 ### 2.1 Reminders & player SMS (player channel only)
 - FR-R1. Players opt in via JOIN; opt out via STOP/aliases; HELP returns program
-  info. Carrier-reserved keywords are never repurposed.
+  info. Carrier-reserved keywords are never repurposed. The catch-all reply to
+  unrecognized text is **status-aware**: JOIN is suggested only to non-members /
+  opted-out numbers; an already-subscribed sender gets a reminder of their status
+  instead (STOP + HELP offered to everyone).
 - FR-R2. A game-night reminder goes out before each scheduled game, in
   America/Chicago, framed as a reminder (not gambling). **A Special Players
   tournament game is invite-only: its reminder goes to the invited (RSVP)

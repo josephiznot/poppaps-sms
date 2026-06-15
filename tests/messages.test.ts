@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseIntent, formatDateOnly, tournamentInvite, seatOpenedInvite, formatConfirmBy, gameReminder, nameConfirmedMessage } from '../src/lib/messages';
+import { parseIntent, formatDateOnly, tournamentInvite, seatOpenedInvite, formatConfirmBy, gameReminder, nameConfirmedMessage, unknownMessage } from '../src/lib/messages';
 import type { Env, Game } from '../src/types';
 
 describe('parseIntent', () => {
@@ -94,6 +94,24 @@ describe('game reminder copy', () => {
     expect(msg).toContain('Cards fly');
     expect(msg).toContain("Poppa P's Smoke Shoppe & Lounge");
     expect(msg).toContain('Reply STOP to opt out.');
+  });
+});
+
+describe('unknown (catch-all) copy', () => {
+  const env = { PROGRAM_NAME: "Poppa P's Poker Night" } as Env;
+
+  it('nudges a non-subscriber to JOIN', () => {
+    const msg = unknownMessage(env, false);
+    expect(msg).toContain('Reply JOIN');
+    expect(msg).toContain('STOP');
+  });
+
+  it('does not tell an already-subscribed member to JOIN', () => {
+    const msg = unknownMessage(env, true);
+    expect(msg).not.toContain('JOIN');
+    expect(msg).toContain('already on the list');
+    expect(msg).toContain('HELP');
+    expect(msg).toContain('STOP');
   });
 });
 

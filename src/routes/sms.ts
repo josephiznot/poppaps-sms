@@ -57,11 +57,12 @@ sms.post('/', async (c) => {
     if (reply) return twiml(reply);
   }
 
+  const member = await db.getMember(c.env.DB, from);
+
   // If we asked this member for their name, their next (non-keyword) text is it.
   // CONFIRM with no pending invite falls back here too — "In..." could be the
   // start of a name reply, and it behaved as UNKNOWN before RSVPs existed.
   if (intent === 'UNKNOWN' || intent === 'CONFIRM') {
-    const member = await db.getMember(c.env.DB, from);
     if (member?.awaiting_name === 1 && member.status === 'SUBSCRIBED') {
       const name = body.trim().slice(0, 40);
       if (name) {
@@ -82,6 +83,7 @@ sms.post('/', async (c) => {
     case 'HELP':
       return twiml(helpMessage(c.env));
     default:
-      return twiml(unknownMessage(c.env));
+      // Only nudge JOIN at people who aren't currently subscribed.
+      return twiml(unknownMessage(c.env, member?.status === 'SUBSCRIBED'));
   }
 });
