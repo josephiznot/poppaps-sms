@@ -38,10 +38,15 @@ backfill. The system never gives a seat away on its own.**
    parsing. A non-invitee texting IN falls through to the normal
    unknown/name-capture handling, so the keyword is invisible outside an
    active invite.
-2. **Invite copy carries a host-written soft deadline** ("Reply IN by Friday to
-   lock your seat — unclaimed seats go to the next player"), entered as a free
-   text field on the Run-tournament form. No timestamp is stored or enforced;
-   the host decides when the deadline has truly passed.
+2. **Invite copy carries a host-picked confirm-by date** ("Reply IN by Sunday,
+   June 21 to lock your seat — unclaimed seats go to the next player"), chosen
+   from a **calendar date picker** on the Run-tournament form and formatted into
+   the message (`formatConfirmBy`, parsed at UTC so a date-only value never slips
+   a day). No timestamp is stored or enforced; the host decides when the deadline
+   has truly passed. Sending is also guarded by a **confirmation prompt** ("…the
+   texts cannot be unsent. Your past points and attendance are NOT deleted."),
+   since the send is the one irreversible step (the season reset only inserts a
+   close marker — see ADR-0002).
 3. **`tournament_rsvps` table** — one row per invited player per season close
    (`season_id`, `member_phone`, `invited_at`, `confirmed_at`). Rows are created
    only for players actually texted; an opted-out top-8 player keeps their

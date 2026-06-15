@@ -7,8 +7,8 @@ import { formatWhen, formatDateOnly } from '../lib/messages';
 import { pointsForPlace } from '../lib/points';
 import { setSession, requireAuth } from '../lib/auth';
 import { broadcast, awardRewardsForAttendees } from '../lib/jobs';
-import { tournamentInvite, seatOpenedInvite } from '../lib/messages';
-import { RECURRING, zonedToUtcIso, gameLocalDates } from '../lib/schedule';
+import { tournamentInvite, seatOpenedInvite, formatConfirmBy } from '../lib/messages';
+import { RECURRING, zonedToUtcIso, gameLocalDates, localDateInTz } from '../lib/schedule';
 import * as db from '../lib/db';
 
 export const admin = new Hono<{ Bindings: Env }>();
@@ -354,7 +354,7 @@ admin.get('/tournament', async (c) => {
           );
         })
         .join('') +
-      `<p class="muted">Players marked 🚫 have opted out of texts; they keep their seat in the snapshot but no invite SMS is sent.</p>`
+      `<p class="muted">Players marked 🚫 have opted out of texts, so they're skipped when you send invites — they keep their seat in the records, but the system never texts an opted-out number.</p>`
     : `<p class="muted">No standings yet — nobody to invite.</p>`;
 
   const gameOptions =
@@ -362,6 +362,7 @@ admin.get('/tournament', async (c) => {
     games.map((g) => `<option value="${esc(g.id)}">${esc(formatWhen(g.starts_at, c.env.TIMEZONE))} — ${esc(g.location)}</option>`).join('');
 
   const nowIso = new Date().toISOString();
+  const today = localDateInTz(new Date(), c.env.TIMEZONE); // min for the confirm-by picker
   const hasUpcomingTournamentGame = games.some((g) => !g.cancelled && g.starts_at > nowIso);
   const scheduleTip = hasUpcomingTournamentGame
     ? ''
@@ -375,10 +376,11 @@ admin.get('/tournament', async (c) => {
     `<p class="muted">Top 8 are pre-checked. Adjust to break any tie, then send invites. ` +
     `This <strong>resets the season</strong> (logical — nothing is deleted).</p>` +
     scheduleTip +
-    `<form class="stack" method="post" action="/admin/tournament/run">` +
+    `<form class="stack" method="post" action="/admin/tournament/run" ` +
+    `onsubmit="return confirm('Send tournament invites now and reset the season? The texts cannot be unsent. Your past points and attendance are NOT deleted.')">` +
     `<label>Tournament game (optional)<select name="game_id">${gameOptions}</select></label>` +
-    `<label>Confirm by (optional, goes in the text — e.g. "Friday")` +
-    `<input type="text" name="confirm_by" maxlength="40" placeholder="Friday"></label>` +
+    `<label>Confirm-by date (optional — players see this date in the invite)` +
+    `<input type="date" name="confirm_by" min="${esc(today)}"></label>` +
     checkboxes +
     `<button class="primary" type="submit">Send invites &amp; reset season</button></form>`;
 
@@ -426,8 +428,11 @@ admin.post('/tournament/run', async (c) => {
   }
   const optedOutCount = invited.length - toText.length;
 
-  const confirmBy = (f.get('confirm_by') ?? '').trim();
-  const res = await broadcast(c.env, toText, tournamentInvite(c.env, game, confirmBy || undefined));
+  // The picker posts a YYYY-MM-DD date; format it to a friendly label ("Sunday,
+  // June 21") for the invite text. (Still just text in the message — not enforced.)
+  const confirmByRaw = (f.get('confirm_by') ?? '').trim();
+  const confirmBy = confirmByRaw ? formatConfirmBy(confirmByRaw) : undefined;
+  const res = await broadcast(c.env, toText, tournamentInvite(c.env, game, confirmBy));
   const seasonId = await db.closeSeason(c.env.DB, { invited: snapshot, gameId: game?.id ?? null, sent: res.sent }, now);
   // RSVP rows only for players actually texted — opted-out seats stay in the
   // snapshot (honest history) but can't be confirmed by SMS.

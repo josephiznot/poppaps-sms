@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseIntent, formatDateOnly, tournamentInvite, seatOpenedInvite } from '../src/lib/messages';
+import { parseIntent, formatDateOnly, tournamentInvite, seatOpenedInvite, formatConfirmBy } from '../src/lib/messages';
 import type { Env, Game } from '../src/types';
 
 describe('parseIntent', () => {
@@ -46,6 +46,17 @@ describe('parseIntent', () => {
   it('keeps carrier keywords winning over confirmation', () => {
     expect(parseIntent('stop')).toBe('OPT_OUT');
     expect(parseIntent('yes')).toBe('OPT_IN'); // YES stays opt-in; webhook special-cases invitees
+  });
+});
+
+describe('formatConfirmBy', () => {
+  it('formats a YYYY-MM-DD date as a friendly label with no time-zone slip', () => {
+    expect(formatConfirmBy('2026-06-21')).toBe('Sunday, June 21');
+    expect(formatConfirmBy('2026-12-01')).toBe('Tuesday, December 1');
+  });
+  it('falls back to the raw input when it is not a calendar date', () => {
+    expect(formatConfirmBy('Friday')).toBe('Friday');
+    expect(formatConfirmBy('')).toBe('');
   });
 });
 

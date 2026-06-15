@@ -127,6 +127,21 @@ export function formatWhen(iso: string, timeZone = 'America/Chicago'): string {
   }).format(d);
 }
 
+/**
+ * Format a calendar date (YYYY-MM-DD, e.g. from a date input) as a friendly,
+ * unambiguous label for the invite copy, e.g. "Sunday, June 21". Parsed at UTC
+ * so a date-only value never slips a day under time-zone conversion. Falls back
+ * to the raw input if it isn't a YYYY-MM-DD date.
+ */
+export function formatConfirmBy(dateStr: string): string {
+  const s = (dateStr ?? '').trim();
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return s;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  if (Number.isNaN(d.getTime())) return s;
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'long', month: 'long', day: 'numeric' }).format(d);
+}
+
 /** Date only in the given time zone, e.g. "06/15/2026". */
 export function formatDateOnly(iso: string, timeZone = 'America/Chicago'): string {
   const d = new Date(iso);

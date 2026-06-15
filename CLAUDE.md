@@ -64,7 +64,9 @@ game on an off week.
 
 **Seat RSVPs (ADR-0006):** invitees reply **IN** to lock their seat (idempotent;
 a bare YES from a pending invitee also confirms). The invite carries a
-host-written soft deadline ("Reply IN by Friday…") — never enforced in code. The
+host-picked confirm-by **date** (calendar picker → formatted into the text, e.g.
+"Reply IN by Sunday, June 21") — never enforced in code; sending is guarded by a
+confirmation prompt (the SMS send is the only irreversible step). The
 admin Tournament page tracks ✅/⏳/🚫 per invitee and offers one-click backfill
 invites to the **next players on the closed season's board**; the system never
 reassigns a seat on its own. Tournament-game reminders go to the **invited

@@ -105,9 +105,11 @@ regress.
   **never texted** — enforced in the broadcast layer, surfaced in the admin UI.
 - FR-T8. **Seat confirmation (ADR-0006):** invitees reply **IN** (or "I'm in" /
   `confirm`; a bare YES from a pending invitee also confirms) to lock their
-  seat. The invite carries a **host-written soft deadline** ("Reply IN by
-  Friday…") — free text in the message, never enforced in code. Confirmations
-  are idempotent; carrier keywords always win.
+  seat. The invite carries a **host-picked confirm-by date**, chosen from a
+  calendar picker and formatted into the message ("Reply IN by Sunday, June
+  21…") — shown to players, never enforced in code. Sending is guarded by a
+  confirmation prompt (the send is irreversible; the season reset is not
+  destructive). Confirmations are idempotent; carrier keywords always win.
 - FR-T9. **Host-paced backfill:** the admin Tournament page tracks ✅ / ⏳ / 🚫
   per invitee and lists the **next players in line** from the *closed* season's
   standings, each with a one-click "seat opened up" invite. **The system never

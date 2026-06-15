@@ -1,0 +1,21 @@
+feat: confirm-by date picker + send-confirmation prompt on tournament run
+
+The "confirm by" field was free text; make it a calendar date picker so
+the host picks an exact date (min = today) instead of typing "Friday".
+The picked YYYY-MM-DD is formatted into the invite as a friendly,
+unambiguous label ("Reply IN by Sunday, June 21") via a new
+formatConfirmBy helper (parsed at UTC so a date-only value never slips a
+day under time-zone conversion).
+
+Also add guardrails around the irreversible send, since the host was
+(reasonably) nervous about the button:
+- a confirmation prompt on "Send invites & reset season" spelling out
+  that texts cannot be unsent and that past points/attendance are NOT
+  deleted (the season reset only inserts a close marker)
+- reworded the opted-out (STOP) note so it is clearly about who is
+  skipped during the send, not a claim that the button never texts
+
+Tests for formatConfirmBy; typecheck + 47 tests pass. Docs updated
+(ADR-0006, requirements FR-T8, CLAUDE.md).
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
