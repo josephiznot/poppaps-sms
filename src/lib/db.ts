@@ -367,10 +367,20 @@ export async function createRsvp(db: D1Database, seasonId: string, phone: string
     .run();
 }
 
-/** Confirm a seat (no-op if already confirmed — first confirmation wins). */
+/** Confirm a seat (CALL). Keeps the first confirm time, and clears any prior
+ *  decline so a player who folded then changed their mind is confirmed. */
 export async function confirmRsvp(db: D1Database, id: string, now: string): Promise<void> {
   await db
-    .prepare('UPDATE tournament_rsvps SET confirmed_at=? WHERE id=? AND confirmed_at IS NULL')
+    .prepare('UPDATE tournament_rsvps SET confirmed_at=COALESCE(confirmed_at, ?), declined_at=NULL WHERE id=?')
+    .bind(now, id)
+    .run();
+}
+
+/** Decline a seat (FOLD). Keeps the first decline time, and clears any prior
+ *  confirm — the latest action wins, so the tracker is unambiguous. */
+export async function declineRsvp(db: D1Database, id: string, now: string): Promise<void> {
+  await db
+    .prepare('UPDATE tournament_rsvps SET declined_at=COALESCE(declined_at, ?), confirmed_at=NULL WHERE id=?')
     .bind(now, id)
     .run();
 }

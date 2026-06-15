@@ -70,7 +70,8 @@ CREATE TABLE IF NOT EXISTS tournament_rsvps (
   season_id    TEXT NOT NULL,
   member_phone TEXT NOT NULL,
   invited_at   TEXT NOT NULL,
-  confirmed_at TEXT,
+  confirmed_at TEXT,                    -- set when they CALL (confirm); NULL = not confirmed
+  declined_at  TEXT,                    -- set when they FOLD (decline); latest action wins
   UNIQUE(season_id, member_phone)
 );
 CREATE INDEX IF NOT EXISTS idx_rsvps_season ON tournament_rsvps(season_id);

@@ -282,12 +282,16 @@ async function rsvpTrackerHtml(env: Env, members: Member[]): Promise<string> {
   ];
 
   let confirmed = 0;
+  let declined = 0;
   const rows = ordered
     .map((phone) => {
       const rsvp = rsvpByPhone.get(phone);
       let status: string;
       if (!rsvp) {
         status = `<span class="pill">🚫</span> <span class="muted">opted out — not texted</span>`;
+      } else if (rsvp.declined_at) {
+        declined++;
+        status = `<span class="pill">❌</span> declined ${esc(formatDateOnly(rsvp.declined_at, env.TIMEZONE))} <span class="muted">— seat free to fill</span>`;
       } else if (rsvp.confirmed_at) {
         confirmed++;
         status = `<span class="pill">✅</span> confirmed ${esc(formatDateOnly(rsvp.confirmed_at, env.TIMEZONE))}`;
@@ -324,8 +328,10 @@ async function rsvpTrackerHtml(env: Env, members: Member[]): Promise<string> {
   const when = game ? ` — ${esc(formatWhen(game.starts_at, env.TIMEZONE))}` : '';
   return (
     `<h2>Seat confirmations${when}</h2>` +
-    `<p class="muted">${confirmed} of ${ordered.length} confirmed. Invitees reply <strong>IN</strong> to lock their seat. ` +
-    `When you decide a seat has gone unclaimed, invite the next player below — the system never gives a seat away on its own.</p>` +
+    `<p class="muted">${confirmed} confirmed, ${declined} declined of ${ordered.length}. Invitees reply ` +
+    `<strong>CALL</strong> to lock a seat or <strong>FOLD</strong> to pass. A declined (❌) seat is free to ` +
+    `give away now; for a no-reply (⏳) seat, wait out your confirm-by date. Either way, invite the next ` +
+    `player below — the system never reassigns a seat on its own.</p>` +
     `<table><tbody>${rows}</tbody></table>` +
     `<h3>Next in line (last season's board)</h3>` +
     `<table><tbody>${nextRows}</tbody></table>`

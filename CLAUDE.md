@@ -62,15 +62,18 @@ surfaces the **top 8 players by points** (`SUM(points)` over the scoring window,
 in Central Time) so the host can invite them via targeted broadcast to a special
 game on an off week.
 
-**Seat RSVPs (ADR-0006):** invitees reply **IN** to lock their seat (idempotent;
-a bare YES from a pending invitee also confirms). The invite carries a
-host-picked confirm-by **date** (calendar picker → formatted into the text, e.g.
-"Reply IN by Sunday, June 21") — never enforced in code; sending is guarded by a
-confirmation prompt (the SMS send is the only irreversible step). The
-admin Tournament page tracks ✅/⏳/🚫 per invitee and offers one-click backfill
-invites to the **next players on the closed season's board**; the system never
-reassigns a seat on its own. Tournament-game reminders go to the **invited
-roster only**, never the whole list (`tournament_rsvps` table).
+**Seat RSVPs (ADR-0006):** invitees reply **CALL** to lock their seat or **FOLD**
+to decline (poker-themed, advertised; IN/YES and OUT/NO/PASS also accepted).
+**FOLD frees the seat but never unsubscribes** (that's STOP); RSVP is
+last-action-wins. The invite carries a host-picked confirm-by **date** (calendar
+picker → formatted into the text, e.g. "Reply CALL by Sunday, June 21") — never
+enforced in code; sending is guarded by a confirmation prompt (the SMS send is
+the only irreversible step). The admin Tournament page tracks ✅/❌/⏳/🚫 per
+invitee and offers one-click backfill invites to the **next players on the closed
+season's board** (a ❌ declined seat is free to fill now; a ⏳ no-reply seat waits
+out the confirm-by date); the system never reassigns a seat on its own.
+Tournament-game reminders go to the **invited roster only**, never the whole list
+(`tournament_rsvps` table).
 
 ## Interaction surfaces (ADR-0005)
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseIntent, formatDateOnly, tournamentInvite, seatOpenedInvite, formatConfirmBy, gameReminder, nameConfirmedMessage, unknownMessage } from '../src/lib/messages';
+import { parseIntent, formatDateOnly, tournamentInvite, seatOpenedInvite, formatConfirmBy, gameReminder, nameConfirmedMessage, unknownMessage, rsvpDeclinedMessage } from '../src/lib/messages';
 import type { Env, Game } from '../src/types';
 
 describe('parseIntent', () => {
@@ -31,16 +31,24 @@ describe('parseIntent', () => {
     expect(parseIntent('join the fun')).toBe('OPT_IN');
   });
 
-  it('detects tournament-seat confirmations', () => {
-    for (const w of ['IN', 'in', 'In!', 'confirm', 'CONFIRMED', "I'm in", 'im in', 'I am in!']) {
+  it('detects tournament-seat confirmations (CALL/IN and synonyms)', () => {
+    for (const w of ['CALL', 'call', 'IN', 'in', 'In!', 'confirm', 'CONFIRMED', "I'm in", 'im in', 'I am in!']) {
       expect(parseIntent(w)).toBe('CONFIRM');
     }
   });
 
-  it('does not confuse confirmations with similar words', () => {
+  it('detects tournament-seat declines (FOLD/OUT and synonyms)', () => {
+    for (const w of ['FOLD', 'fold', 'OUT', 'out', 'No', 'nope', 'pass', 'decline', "can't", 'cant', "I'm out"]) {
+      expect(parseIntent(w)).toBe('DECLINE');
+    }
+  });
+
+  it('does not confuse confirmations/declines with similar words', () => {
     expect(parseIntent('info')).toBe('HELP'); // 'info' ≠ 'in'
     expect(parseIntent('Ingrid B')).toBe('UNKNOWN'); // name reply, not IN
     expect(parseIntent('inside straight')).toBe('UNKNOWN');
+    expect(parseIntent('Nolan P')).toBe('UNKNOWN'); // name reply, not "no"
+    expect(parseIntent('cancel')).toBe('OPT_OUT'); // carrier word wins over decline
   });
 
   it('keeps carrier keywords winning over confirmation', () => {
@@ -64,22 +72,31 @@ describe('tournament invite copy', () => {
   const env = { PROGRAM_NAME: "Poppa P's Poker Night", TIMEZONE: 'America/Chicago' } as Env;
   const game = { starts_at: '2026-06-20T23:30:00.000Z', location: "Poppa P's" } as Game;
 
-  it('asks for an IN reply with the host deadline baked into the copy', () => {
-    const msg = tournamentInvite(env, game, 'Friday');
-    expect(msg).toContain('Reply IN by Friday to lock your seat');
+  it('asks for CALL/FOLD with the host deadline baked into the copy', () => {
+    const msg = tournamentInvite(env, game, 'Sunday, June 21');
+    expect(msg).toContain('Reply CALL by Sunday, June 21 to grab your seat');
+    expect(msg).toContain('FOLD to pass');
     expect(msg).toContain("at Poppa P's");
     expect(msg).toContain('Reply STOP'); // compliance line stays
   });
 
   it('omits the deadline when the host leaves it blank', () => {
-    expect(tournamentInvite(env, game)).toContain('Reply IN to lock your seat');
+    expect(tournamentInvite(env, game)).toContain('Reply CALL to grab your seat');
     expect(tournamentInvite(env, null)).toContain('Details to come.');
   });
 
-  it('backfill invite asks for IN and keeps STOP', () => {
+  it('backfill invite asks for CALL/FOLD and keeps STOP', () => {
     const msg = seatOpenedInvite(env, game);
     expect(msg).toContain('seat opened up');
-    expect(msg).toContain('Reply IN to claim your seat');
+    expect(msg).toContain('Reply CALL to grab your seat');
+    expect(msg).toContain('FOLD to pass');
+    expect(msg).toContain('Reply STOP');
+  });
+
+  it('decline reply frees the seat but keeps them subscribed', () => {
+    const msg = rsvpDeclinedMessage(env);
+    expect(msg).toContain('opened your seat');
+    expect(msg).toContain('still on the list'); // not an unsubscribe
     expect(msg).toContain('Reply STOP');
   });
 });

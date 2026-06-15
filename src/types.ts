@@ -73,6 +73,7 @@ export interface TournamentRsvp {
   member_phone: string;
   invited_at: string;
   confirmed_at: string | null;
+  declined_at: string | null;
 }
 
 export interface AwardedReward {

@@ -31,13 +31,18 @@ on its off week, which read as an open invitation to the whole roster.
 **Players confirm by SMS; the deadline lives in the message; the host paces the
 backfill. The system never gives a seat away on its own.**
 
-1. **`IN` is the confirmation keyword** (also `confirm`, "I'm in"; a bare `YES`
-   from a member with a pending invite confirms too, since people reply YES no
-   matter what the message asks — for everyone else YES keeps its carrier
-   opt-in meaning). Carrier keywords (STOP/HELP/…) always win over confirmation
-   parsing. A non-invitee texting IN falls through to the normal
-   unknown/name-capture handling, so the keyword is invisible outside an
-   active invite.
+1. **`CALL` confirms and `FOLD` declines** (poker-themed, advertised in the
+   invite). Plain-English synonyms are accepted so no RSVP bounces: confirm =
+   CALL / IN / "I'm in" / `confirm` (and a bare `YES` from a member with a
+   pending invite, since people reply YES regardless); decline = FOLD / OUT /
+   NO / PASS / "can't" / "I'm out". Carrier keywords (STOP/HELP/…) always win
+   over RSVP parsing — note a player who texts STOP/CANCEL to "decline" actually
+   unsubscribes, which is why the invite steers them to FOLD. Both confirm and
+   decline **only act for a member with a pending invite**; for anyone else they
+   fall through to normal unknown/name-capture handling, so the keywords are
+   invisible outside an active invite. **FOLD never unsubscribes** — it frees the
+   tournament seat but keeps the member on the reminder list. Confirm/decline is
+   last-action-wins (CALL after FOLD re-claims the seat, and vice versa).
 2. **Invite copy carries a host-picked confirm-by date** ("Reply IN by Sunday,
    June 21 to lock your seat — unclaimed seats go to the next player"), chosen
    from a **calendar date picker** on the Run-tournament form and formatted into
@@ -48,15 +53,16 @@ backfill. The system never gives a seat away on its own.**
    since the send is the one irreversible step (the season reset only inserts a
    close marker — see ADR-0002).
 3. **`tournament_rsvps` table** — one row per invited player per season close
-   (`season_id`, `member_phone`, `invited_at`, `confirmed_at`). Rows are created
-   only for players actually texted; an opted-out top-8 player keeps their
-   snapshot seat (ADR-0002 honest history) but has no RSVP row.
+   (`season_id`, `member_phone`, `invited_at`, `confirmed_at`, `declined_at`).
+   Rows are created only for players actually texted; an opted-out top-8 player
+   keeps their snapshot seat (ADR-0002 honest history) but has no RSVP row.
 4. **Admin tracker on `/admin/tournament`** — until the tournament game is
-   played, the page shows each invitee as ✅ confirmed / ⏳ no reply / 🚫 opted
-   out, plus the **next players in line** computed from the *closed* season's
-   standings (the standings query gained an upper time bound for this), each
-   with a one-click **Send invite** that texts a "seat opened up" message and
-   adds them to the RSVP roster.
+   played, the page shows each invitee as ✅ confirmed / ❌ declined / ⏳ no reply
+   / 🚫 opted out, plus the **next players in line** computed from the *closed*
+   season's standings (the standings query gained an upper time bound for this),
+   each with a one-click **Send invite** that texts a "seat opened up" message and
+   adds them to the RSVP roster. A ❌ declined seat can be backfilled immediately;
+   a ⏳ no-reply seat waits out the host's confirm-by date.
 5. **Tournament reminders go to invitees only.** The reminder cron resolves a
    tournament game to the season close that references it (`snapshot.gameId`)
    and texts only that RSVP roster. If a tournament game has no linked invites,

@@ -106,17 +106,21 @@ regress.
 - FR-T7. Tournament invites are sent **only to SUBSCRIBED members**; an opted-out
   top-8 player keeps their seat in the season snapshot (marked `optedOut`) but is
   **never texted** — enforced in the broadcast layer, surfaced in the admin UI.
-- FR-T8. **Seat confirmation (ADR-0006):** invitees reply **IN** (or "I'm in" /
-  `confirm`; a bare YES from a pending invitee also confirms) to lock their
-  seat. The invite carries a **host-picked confirm-by date**, chosen from a
-  calendar picker and formatted into the message ("Reply IN by Sunday, June
-  21…") — shown to players, never enforced in code. Sending is guarded by a
-  confirmation prompt (the send is irreversible; the season reset is not
-  destructive). Confirmations are idempotent; carrier keywords always win.
-- FR-T9. **Host-paced backfill:** the admin Tournament page tracks ✅ / ⏳ / 🚫
-  per invitee and lists the **next players in line** from the *closed* season's
-  standings, each with a one-click "seat opened up" invite. **The system never
-  reassigns a seat on its own** — no deadline cron, no auto-promotion.
+- FR-T8. **Seat RSVP (ADR-0006):** invitees reply **CALL** to lock their seat or
+  **FOLD** to decline (poker-themed, advertised in the invite); plain synonyms
+  (IN/YES, OUT/NO/PASS/"can't") are also accepted. **FOLD frees the seat but does
+  NOT unsubscribe** them. Both only act for a member with a pending invite;
+  carrier keywords (STOP/HELP) always win. The invite carries a **host-picked
+  confirm-by date** from a calendar picker, formatted into the message ("Reply
+  CALL by Sunday, June 21…") — shown to players, never enforced in code. Sending
+  is guarded by a confirmation prompt (the send is irreversible; the season reset
+  is not destructive). RSVP is last-action-wins and idempotent.
+- FR-T9. **Host-paced backfill:** the admin Tournament page tracks ✅ confirmed /
+  ❌ declined / ⏳ no reply / 🚫 opted out per invitee and lists the **next players
+  in line** from the *closed* season's standings, each with a one-click "seat
+  opened up" invite. A ❌ declined seat is free to fill immediately; a ⏳ no-reply
+  seat waits out the confirm-by date. **The system never reassigns a seat on its
+  own** — no deadline cron, no auto-promotion.
 
 ### 2.5 Attendance & rewards
 - FR-W1. **Attendance is host-marked** on the post-game screen (tap who attended),

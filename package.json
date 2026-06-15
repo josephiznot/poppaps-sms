@@ -20,7 +20,9 @@
     "db:migrate:0002:local": "wrangler d1 execute poker-sms --local --file=./migrations/0002_tournament_rsvps.sql",
     "db:migrate:0002:remote": "wrangler d1 execute poker-sms --remote --file=./migrations/0002_tournament_rsvps.sql",
     "db:migrate:0003:local": "wrangler d1 execute poker-sms --local --file=./migrations/0003_placements.sql",
-    "db:migrate:0003:remote": "wrangler d1 execute poker-sms --remote --file=./migrations/0003_placements.sql"
+    "db:migrate:0003:remote": "wrangler d1 execute poker-sms --remote --file=./migrations/0003_placements.sql",
+    "db:migrate:0004:local": "wrangler d1 execute poker-sms --local --file=./migrations/0004_rsvp_declined.sql",
+    "db:migrate:0004:remote": "wrangler d1 execute poker-sms --remote --file=./migrations/0004_rsvp_declined.sql"
   },
   "dependencies": {
     "hono": "^4.6.3"

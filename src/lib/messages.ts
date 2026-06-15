@@ -8,27 +8,32 @@
 import type { Env, Game } from '../types';
 import { RECURRING, to12h } from './schedule';
 
-export type Intent = 'OPT_IN' | 'OPT_OUT' | 'HELP' | 'CONFIRM' | 'UNKNOWN';
+export type Intent = 'OPT_IN' | 'OPT_OUT' | 'HELP' | 'CONFIRM' | 'DECLINE' | 'UNKNOWN';
 
 const OPT_IN_WORDS = new Set(['join', 'start', 'yes', 'subscribe', 'unstop', 'poker']);
 const OPT_OUT_WORDS = new Set([
   'stop', 'stopall', 'unsubscribe', 'cancel', 'end', 'quit', 'revoke', 'optout',
 ]);
 const HELP_WORDS = new Set(['help', 'info']);
-// Tournament-seat confirmation ("Reply IN to lock your seat"). Only meaningful
-// for a member with a pending invite — the webhook falls back to UNKNOWN
-// handling otherwise.
-const CONFIRM_WORDS = new Set(['in', 'confirm', 'confirmed']);
+// Tournament-seat RSVP. CALL/FOLD are the advertised poker keywords; plain
+// IN/YES and OUT/NO are accepted as synonyms so nobody's RSVP bounces. Both are
+// only meaningful for a member with a pending invite — the webhook falls back to
+// UNKNOWN handling otherwise (so a stray "no" from a non-invitee isn't a decline).
+const CONFIRM_WORDS = new Set(['call', 'in', 'confirm', 'confirmed']);
+const DECLINE_WORDS = new Set(['fold', 'out', 'no', 'nope', 'pass', 'decline', 'cant', "can't", 'cannot']);
 
 /** Classify by first word, how carriers match keywords. */
 export function parseIntent(body: string | undefined | null): Intent {
   const text = (body ?? '').trim().toLowerCase();
   const first = text.split(/\s+/)[0] ?? '';
+  const firstClean = first.replace(/[!.?,]+$/, '');
   if (OPT_OUT_WORDS.has(first)) return 'OPT_OUT';
   if (OPT_IN_WORDS.has(first)) return 'OPT_IN';
   if (HELP_WORDS.has(first)) return 'HELP';
-  // "IN" / "In!" / "confirm", plus the natural "I'm in" / "im in" / "I am in".
-  if (CONFIRM_WORDS.has(first.replace(/[!.?]+$/, '')) || /^(i'?m|i am)\s+in\b/.test(text)) return 'CONFIRM';
+  // "CALL" / "IN" / "In!" / "confirm", plus the natural "I'm in" / "I am in".
+  if (CONFIRM_WORDS.has(firstClean) || /^(i'?m|i am)\s+in\b/.test(text)) return 'CONFIRM';
+  // "FOLD" / "OUT" / "no" / "pass", plus "can't make it" / "I'm out".
+  if (DECLINE_WORDS.has(firstClean) || /^(i'?m|i am)\s+out\b/.test(text)) return 'DECLINE';
   return 'UNKNOWN';
 }
 
@@ -89,22 +94,30 @@ export function gameReminder(env: Env, game: Game): string {
 }
 
 /**
- * Top-8 invite. `confirmBy` is a host-written soft deadline ("Friday") baked
- * into the copy — the deadline lives in the message, not in code; the host
- * decides when it has passed and backfills from the leaderboard.
+ * Top-8 invite. CALL / FOLD are the advertised RSVP keywords (IN / OUT also
+ * work). `confirmBy` is a host-picked deadline baked into the copy — it lives in
+ * the message, not in code; the host decides when it has passed and backfills.
  */
 export function tournamentInvite(env: Env, game: Game | null, confirmBy?: string): string {
   const head = `${env.PROGRAM_NAME}: 🏆 You made the Special Players tournament — our biggest cigar prizes of the season!`;
   const where = game ? `${formatWhen(game.starts_at, env.TIMEZONE)} at ${game.location}.` : 'Details to come.';
   const by = confirmBy ? ` by ${confirmBy}` : '';
-  return `${head} ${where} Reply IN${by} to lock your seat — unclaimed seats go to the next player. Reply STOP to opt out.`;
+  return `${head} ${where} Reply CALL${by} to grab your seat or FOLD to pass — unclaimed seats go to the next player. Reply STOP to opt out.`;
 }
 
 /** Backfill invite to the next player on the closed season's leaderboard. */
 export function seatOpenedInvite(env: Env, game: Game | null): string {
   const head = `${env.PROGRAM_NAME}: 🏆 A seat opened up in the Special Players tournament and you're next on the leaderboard!`;
   const where = game ? `${formatWhen(game.starts_at, env.TIMEZONE)} at ${game.location}.` : 'Details to come.';
-  return `${head} ${where} Reply IN to claim your seat. Reply STOP to opt out.`;
+  return `${head} ${where} Reply CALL to grab your seat or FOLD to pass. Reply STOP to opt out.`;
+}
+
+/** Reply to FOLD/decline — frees the seat but keeps them subscribed to reminders. */
+export function rsvpDeclinedMessage(env: Env): string {
+  return (
+    `${env.PROGRAM_NAME}: 👍 No problem — we've opened your seat for the next player. ` +
+    `You're still on the list for game reminders. Reply STOP to opt out.`
+  );
 }
 
 /** Reply to IN — also re-sent if they confirm twice (harmless, reassuring). */

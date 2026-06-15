@@ -11,6 +11,7 @@ import {
   helpMessage,
   unknownMessage,
   rsvpConfirmedMessage,
+  rsvpDeclinedMessage,
 } from '../lib/messages';
 import * as db from '../lib/db';
 
@@ -32,6 +33,20 @@ async function confirmSeat(env: Env, from: string, now: string): Promise<string 
   return rsvpConfirmedMessage(env, game);
 }
 
+/**
+ * Decline a pending tournament-seat invite (FOLD, ADR-0006). Frees the seat for
+ * the host to backfill, but does NOT unsubscribe them (that's STOP). Returns the
+ * reply, or null if no pending invite (caller falls back to normal handling).
+ */
+async function declineSeat(env: Env, from: string, now: string): Promise<string | null> {
+  const member = await db.getMember(env.DB, from);
+  if (member?.status !== 'SUBSCRIBED') return null;
+  const rsvp = await db.rsvpForLatestSeason(env.DB, from);
+  if (!rsvp) return null;
+  await db.declineRsvp(env.DB, rsvp.id, now);
+  return rsvpDeclinedMessage(env);
+}
+
 sms.post('/', async (c) => {
   const raw = await c.req.text();
   const params = Object.fromEntries(new URLSearchParams(raw)) as Record<string, string>;
@@ -49,20 +64,25 @@ sms.post('/', async (c) => {
   const intent = parseIntent(body);
   const firstWord = body.trim().toLowerCase().split(/\s+/)[0] ?? '';
 
-  // Tournament-seat confirmation. A bare "YES" from a member with a pending
-  // invite also confirms (people reply YES no matter what the message asks);
-  // for everyone else YES keeps its carrier opt-in meaning.
+  // Tournament-seat RSVP. A bare "YES" from a member with a pending invite also
+  // confirms (people reply YES no matter what the message asks); for everyone
+  // else YES keeps its carrier opt-in meaning. CALL confirms, FOLD declines —
+  // both no-op (and fall through) for anyone without a pending invite.
   if (intent === 'CONFIRM' || (intent === 'OPT_IN' && firstWord === 'yes')) {
     const reply = await confirmSeat(c.env, from, now);
+    if (reply) return twiml(reply);
+  }
+  if (intent === 'DECLINE') {
+    const reply = await declineSeat(c.env, from, now);
     if (reply) return twiml(reply);
   }
 
   const member = await db.getMember(c.env.DB, from);
 
   // If we asked this member for their name, their next (non-keyword) text is it.
-  // CONFIRM with no pending invite falls back here too — "In..." could be the
-  // start of a name reply, and it behaved as UNKNOWN before RSVPs existed.
-  if (intent === 'UNKNOWN' || intent === 'CONFIRM') {
+  // CONFIRM/DECLINE with no pending invite fall back here too — e.g. "In..." or
+  // a one-word reply could be the start of a name, as it was before RSVPs.
+  if (intent === 'UNKNOWN' || intent === 'CONFIRM' || intent === 'DECLINE') {
     if (member?.awaiting_name === 1 && member.status === 'SUBSCRIBED') {
       const name = body.trim().slice(0, 40);
       if (name) {
