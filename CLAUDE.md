@@ -87,7 +87,9 @@ roster only**, never the whole list (`tournament_rsvps` table).
   **program terms** at `/terms`, **privacy** at `/privacy`, and a JSON **`/health`**
   (which git commit is live + how many commits behind `main`; SHA baked in at
   deploy time — see Key commands). Names shown as **first name + last initial
-  only**. Ace-of-spades favicon (inline SVG in `lib/html.ts`).
+  only**. Standings use **numbered ranks**, an exclusive **face-card chip for the
+  top 4** (A/K/Q/J), and a labelled **top-8 "tournament line"** divider.
+  Ace-of-spades favicon (inline SVG in `lib/html.ts`).
 
 ## Roadmap / status
 

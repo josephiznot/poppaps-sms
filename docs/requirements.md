@@ -148,6 +148,11 @@ regress.
   winners / season champions**.
 - FR-PUB2. **Privacy:** show **first name + last initial only**; never fuller PII,
   never phone numbers (FR-M4 discloses this).
+- FR-PUB2a. **Standings rank presentation:** plain numbered ranks; the **top 4**
+  carry an exclusive face-card chip by name (1st=A, 2nd=K, 3rd=Q, 4th=J), and a
+  labelled **"Top 8 · Special Players tournament line"** divider marks the
+  tournament-qualification cut (shown only when a 9th player exists). Top-3
+  podium row tint retained.
 - FR-PUB3. The page URL may be shared in reminder texts.
 - FR-PUB4. A public **game-rules page** (`/rules`) shows the format, blind
   structure, buy-in/buy-back, and cigar payouts — viewable ahead of time and a

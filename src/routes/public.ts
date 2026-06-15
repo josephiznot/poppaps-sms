@@ -18,10 +18,16 @@ const footerLinks =
   `<p class="muted" style="margin-top:2rem"><a href="/rules">Game rules</a> · ` +
   `<a href="/terms">SMS terms</a> · <a href="/privacy">Privacy</a></p>`;
 
-// Ranks 1–13 get a playing-card badge (A down to 2); 14th+ falls back to a plain number.
+/** Plain 1-based rank number (standings Rank column + the profile header). */
 export function rankBadge(i: number): string {
-  const r = cardForRank(i);
-  return r ? `<span class="card">${r}<small>♠</small></span>` : `${i + 1}`;
+  return `${i + 1}`;
+}
+
+/** The top 4 get an exclusive face card by their name: 1st=A, 2nd=K, 3rd=Q, 4th=J. */
+function faceCard(i: number): string {
+  if (i > 3) return '';
+  const r = cardForRank(i); // A, K, Q, J
+  return r ? ` <span class="card sm" title="Top 4">${r}<small>♠</small></span>` : '';
 }
 
 function standingsTable(
@@ -39,10 +45,16 @@ function standingsTable(
         const name = esc(r.display_name ?? 'New player');
         const pid = idByPhone?.get(r.phone); // opaque hash id — never the phone (ADR-0005)
         const nameHtml = pid ? `<a class="player" href="/player/${esc(pid)}">${name}</a>` : name;
-        return (
-          `<tr${cls}><td>${rankBadge(i)}</td><td>${nameHtml}${chips}</td>` +
-          `<td style="text-align:right">${r.total}</td></tr>`
-        );
+        const row =
+          `<tr${cls}><td>${rankBadge(i)}</td><td>${nameHtml}${faceCard(i)}${chips}</td>` +
+          `<td style="text-align:right">${r.total}</td></tr>`;
+        // Tournament-qualification cut: a labelled line after the top 8 (only
+        // when there's a 9th player to separate from).
+        const cut =
+          i === 7 && rows.length > 8
+            ? `<tr class="cutline"><td colspan="3">Top 8 · Special Players tournament line</td></tr>`
+            : '';
+        return row + cut;
       })
       .join('') +
     `</tbody></table>`

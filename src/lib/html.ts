@@ -77,6 +77,11 @@ const STYLE = `
           background: #fff; color: #111; font: 700 .85rem/1 Georgia, serif;
           box-shadow: 0 1px 2px #0002; }
   .card small { font-size: .78em; margin-left: 1px; }
+  .card.sm { min-width: 1.4rem; padding: .05rem .26rem; font-size: .72rem;
+             margin-left: .35rem; vertical-align: middle; }
+  tr.cutline td { text-align: center; padding: .3rem .45rem; font-size: .72rem;
+                  text-transform: uppercase; letter-spacing: .06em; color: #5b2227;
+                  background: #7c21281a; border-top: 2px solid #7c2128; }
   .hero { display: flex; align-items: center; gap: .8rem; background: #0c3527; color: #f7f1e3;
           padding: .85rem 1rem; border-radius: 12px; margin: 0 0 1.2rem; }
   .hero .card { min-width: 2.3rem; font-size: 1.25rem; padding: .32rem .42rem; }
