@@ -163,9 +163,10 @@ admin.get('/games/:id', async (c) => {
   }
 
   // Prefill from any existing result so this screen also edits past games.
+  // Tournament games now prefill too — their ranks are stored with 0 points.
   const existing = await db.pointsForGame(c.env.DB, game.id);
   const placePhone: Record<number, string> = {};
-  for (const row of existing) placePhone[6 - row.points] = row.member_phone; // 5pts→1st … 1pt→5th
+  for (const row of existing) if (row.place) placePhone[row.place] = row.member_phone;
   const attended = new Set(await db.attendeesForGame(c.env.DB, game.id));
   const editing = existing.length > 0;
 
@@ -211,16 +212,18 @@ admin.post('/games/:id/result', async (c) => {
   await db.clearGameResults(c.env.DB, game.id);
   await db.clearAttendanceForGame(c.env.DB, game.id);
 
-  // Award points by the ACTUAL place selected (place 1 = 5 pts … place 5 = 1 pt),
-  // NOT by how many slots were filled. **Special Players tournament games award NO
-  // season points** (D5) — winners still count as attendance but never touch the
-  // standings. Dedup keeps a player's highest place if listed twice.
+  // Record the finishing place for every filled slot so the result is preserved
+  // for ANY game. Points follow the ACTUAL place selected (place 1 = 5 pts …
+  // place 5 = 1 pt). **Special Players tournament games award NO season points**
+  // (D5/ADR-0007): the rank is still saved (so the champion + finishing order
+  // are kept) but with 0 points, so standings are untouched. Dedup keeps a
+  // player's highest place if listed twice.
   const winners: string[] = [];
   for (const p of [1, 2, 3, 4, 5]) {
     const phone = f.get(`place${p}`);
     if (phone && !winners.includes(phone)) {
       winners.push(phone);
-      if (!isTournament) await db.addPoints(c.env.DB, phone, game.id, pointsForPlace(p - 1), now);
+      await db.recordPlacement(c.env.DB, phone, game.id, p, isTournament ? 0 : pointsForPlace(p - 1), now);
     }
   }
 

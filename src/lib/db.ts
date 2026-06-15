@@ -181,16 +181,23 @@ export async function lastSeasonClose(db: D1Database): Promise<string> {
   return r?.c ?? '';
 }
 
-export async function addPoints(
+/**
+ * Append a result row recording a finishing `place` (1..5) and its season
+ * `points`. Tournament games pass `points = 0` so the rank is preserved while
+ * the standings SUM stays untouched (ADR-0007) — the season math never needs a
+ * tournament filter because there are simply no points to add.
+ */
+export async function recordPlacement(
   db: D1Database,
   memberPhone: string,
   gameId: string,
+  place: number,
   points: number,
   now: string,
 ): Promise<void> {
   await db
-    .prepare('INSERT INTO points_ledger (id, member_phone, game_id, points, awarded_at) VALUES (?, ?, ?, ?, ?)')
-    .bind(uid(), memberPhone, gameId, points, now)
+    .prepare('INSERT INTO points_ledger (id, member_phone, game_id, points, place, awarded_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(uid(), memberPhone, gameId, points, place, now)
     .run();
 }
 
@@ -280,10 +287,11 @@ export async function playerSeasonHistory(
   db: D1Database,
   phone: string,
   sinceIso: string,
-): Promise<Array<{ game_id: string; starts_at: string; is_tournament: number; points: number | null }>> {
+): Promise<Array<{ game_id: string; starts_at: string; is_tournament: number; points: number | null; place: number | null }>> {
   const r = await db
     .prepare(
-      `SELECT a.game_id, g.starts_at, g.is_tournament, p.points
+      `SELECT a.game_id, g.starts_at, g.is_tournament, p.points,
+              COALESCE(p.place, 6 - p.points) AS place
        FROM attendance a
        JOIN games g ON g.id = a.game_id
        LEFT JOIN points_ledger p ON p.game_id = a.game_id AND p.member_phone = a.member_phone
@@ -291,7 +299,7 @@ export async function playerSeasonHistory(
        ORDER BY g.starts_at DESC`,
     )
     .bind(phone, sinceIso)
-    .all<{ game_id: string; starts_at: string; is_tournament: number; points: number | null }>();
+    .all<{ game_id: string; starts_at: string; is_tournament: number; points: number | null; place: number | null }>();
   return r.results ?? [];
 }
 
@@ -310,12 +318,16 @@ export async function attendanceCounts(db: D1Database): Promise<Record<string, n
 // (a deliberate, scoped exception to the append-only ledger; ADR-0002).
 // ---------------------------------------------------------------------------
 
-/** The points rows for one game (used to prefill the edit form). */
-export async function pointsForGame(db: D1Database, gameId: string): Promise<Array<{ member_phone: string; points: number }>> {
+/** The result rows for one game (used to prefill the edit form). `place` falls
+ *  back to the legacy points decode (5pts→1st) for rows written before 0003. */
+export async function pointsForGame(
+  db: D1Database,
+  gameId: string,
+): Promise<Array<{ member_phone: string; points: number; place: number | null }>> {
   const r = await db
-    .prepare('SELECT member_phone, points FROM points_ledger WHERE game_id=? ORDER BY points DESC')
+    .prepare('SELECT member_phone, points, COALESCE(place, 6 - points) AS place FROM points_ledger WHERE game_id=? ORDER BY place ASC')
     .bind(gameId)
-    .all<{ member_phone: string; points: number }>();
+    .all<{ member_phone: string; points: number; place: number | null }>();
   return r.results ?? [];
 }
 
@@ -451,19 +463,33 @@ export interface GameResultRow {
   member_phone: string;
   display_name: string | null;
   points: number;
+  place: number | null;
 }
 
-/** All scored finishers for one game, highest first (for the public game page). */
+/** All recorded finishers for one game, by finishing place (for the public game
+ *  page). Includes tournament finishers, whose points are 0 but place is set. */
 export async function gameResults(db: D1Database, gameId: string): Promise<GameResultRow[]> {
   const r = await db
     .prepare(
-      `SELECT p.member_phone, m.display_name, p.points
+      `SELECT p.member_phone, m.display_name, p.points, COALESCE(p.place, 6 - p.points) AS place
        FROM points_ledger p LEFT JOIN members m ON m.phone = p.member_phone
-       WHERE p.game_id = ? ORDER BY p.points DESC`,
+       WHERE p.game_id = ? ORDER BY place ASC`,
     )
     .bind(gameId)
     .all<GameResultRow>();
   return r.results ?? [];
+}
+
+/** The 1st-place finisher of a game (tournament champion, or a regular winner). */
+export async function champion(db: D1Database, gameId: string): Promise<{ phone: string; name: string | null } | null> {
+  return db
+    .prepare(
+      `SELECT p.member_phone AS phone, m.display_name AS name
+       FROM points_ledger p LEFT JOIN members m ON m.phone = p.member_phone
+       WHERE p.game_id = ? AND COALESCE(p.place, 6 - p.points) = 1 LIMIT 1`,
+    )
+    .bind(gameId)
+    .first<{ phone: string; name: string | null }>();
 }
 
 export interface RecentResultRow {
@@ -479,7 +505,7 @@ export async function recentResults(db: D1Database, limit: number): Promise<Rece
     .prepare(
       `SELECT g.id, g.starts_at, g.is_tournament,
               (SELECT m.display_name FROM points_ledger p JOIN members m ON m.phone = p.member_phone
-               WHERE p.game_id = g.id AND p.points = 5 LIMIT 1) AS winner
+               WHERE p.game_id = g.id AND COALESCE(p.place, 6 - p.points) = 1 LIMIT 1) AS winner
        FROM games g
        WHERE EXISTS (SELECT 1 FROM points_ledger p WHERE p.game_id = g.id)
        ORDER BY g.starts_at DESC LIMIT ?`,

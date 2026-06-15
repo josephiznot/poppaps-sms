@@ -49,6 +49,15 @@ export interface StandingRow {
   last_award: string;
 }
 
+export interface PointsLedgerRow {
+  id: string;
+  member_phone: string;
+  game_id: string;
+  points: number;
+  place: number | null;
+  awarded_at: string;
+}
+
 export interface TournamentRsvp {
   id: string;
   season_id: string;

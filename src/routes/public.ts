@@ -8,7 +8,7 @@ import { formatUs } from '../lib/phone';
 import { privacyPage, termsPage } from '../views/policies';
 import { rulesPage } from '../views/rules';
 import { badgesForAll } from '../lib/badges';
-import { cardForRank, seasonStats } from '../lib/points';
+import { cardForRank, seasonStats, placeOrdinal } from '../lib/points';
 import { playerIdMap } from '../lib/playerId';
 import * as db from '../lib/db';
 
@@ -49,9 +49,6 @@ function standingsTable(
   );
 }
 
-function placeLabel(points: number): string {
-  return (({ 5: '1st', 4: '2nd', 3: '3rd', 2: '4th', 1: '5th' }) as Record<number, string>)[points] ?? '—';
-}
 
 // ---- standings (current season) -------------------------------------------
 
@@ -141,15 +138,20 @@ publicRoutes.get('/game/:id', async (c) => {
   const table = results.length
     ? `<table><thead><tr><th>Place</th><th>Player</th><th>Pts</th></tr></thead><tbody>` +
       results
-        .map((r) => `<tr><td>${placeLabel(r.points)}</td><td>${esc(r.display_name ?? 'Player')}</td><td>${r.points}</td></tr>`)
+        .map(
+          (r) =>
+            `<tr><td>${placeOrdinal(r.place)}</td><td>${esc(r.display_name ?? 'Player')}</td>` +
+            `<td>${game.is_tournament ? '—' : r.points}</td></tr>`,
+        )
         .join('') +
       `</tbody></table>`
     : `<p class="muted">No results recorded for this game yet.</p>`;
 
+  const heading = game.is_tournament ? 'Final standings' : 'Winners';
   const body =
     `<h1>${when}${game.is_tournament ? ' <span class="pill">🏆 tournament</span>' : ''}</h1>` +
-    `<p class="muted">${esc(game.location)}</p>` +
-    `<h2>Winners</h2>${table}` +
+    `<p class="muted">${esc(game.location)}${game.is_tournament ? ' — no season points; bragging rights only' : ''}</p>` +
+    `<h2>${heading}</h2>${table}` +
     `<p class="muted" style="margin-top:2rem"><a href="/">← Standings</a> · <a href="/seasons">Seasons</a></p>`;
 
   return layout(`Game ${when} — ${c.env.PROGRAM_NAME}`, body, publicNav);
@@ -192,8 +194,8 @@ publicRoutes.get('/player/:id', async (c) => {
           const pts = g.is_tournament ? 0 : (g.points ?? 0);
           return (
             `<tr><td><a href="/game/${esc(g.game_id)}">${esc(formatWhen(g.starts_at, c.env.TIMEZONE))}</a></td>` +
-            `<td>${placeLabel(pts)}${g.is_tournament ? ' <span class="pill">🏆 tournament</span>' : ''}</td>` +
-            `<td style="text-align:right">${pts}</td></tr>`
+            `<td>${placeOrdinal(g.place)}${g.is_tournament ? ' <span class="pill">🏆 tournament</span>' : ''}</td>` +
+            `<td style="text-align:right">${g.is_tournament ? '—' : pts}</td></tr>`
           );
         })
         .join('') +
@@ -218,23 +220,38 @@ publicRoutes.get('/seasons', async (c) => {
   const current = await db.standings(c.env.DB, since);
   const seasons = (await db.listSeasons(c.env.DB)).map((s, i) => ({ ...s, n: i + 1 })); // n: chronological
 
+  // The champion is the tournament's actual 1st-place finisher once results are
+  // entered; until then we fall back to the top seed (points leader at close).
   const pastHtml = seasons.length
-    ? seasons
-        .slice()
-        .reverse() // most recent first
-        .map((s) => {
-          const invited = s.snapshot.invited ?? [];
-          const champ = invited[0]?.name ?? '—';
-          const list = invited.length
-            ? `<ol>` + invited.map((p, idx) => `<li>${idx === 0 ? '🏆 ' : ''}${esc(p.name ?? 'Player')}</li>`).join('') + `</ol>`
-            : `<p class="muted">No players recorded.</p>`;
-          return (
-            `<h3>Season ${s.n} <span class="muted">— ended ${esc(formatWhen(s.closed_at, c.env.TIMEZONE))}</span></h3>` +
-            `<p>🏆 Champion: <strong>${esc(champ)}</strong></p>` +
-            `<p class="muted">Special Players (invited to the tournament):</p>${list}`
-          );
-        })
-        .join('')
+    ? (
+        await Promise.all(
+          seasons
+            .slice()
+            .reverse() // most recent first
+            .map(async (s) => {
+              const invited = s.snapshot.invited ?? [];
+              const winner = s.snapshot.gameId ? await db.champion(c.env.DB, s.snapshot.gameId) : null;
+              const champPhone = winner?.phone ?? invited[0]?.phone ?? null;
+              const champName = winner?.name ?? invited[0]?.name ?? '—';
+              const decided = !!winner;
+              const list = invited.length
+                ? `<ol>` +
+                  invited
+                    .map((p) => `<li>${p.phone === champPhone ? '🏆 ' : ''}${esc(p.name ?? 'Player')}</li>`)
+                    .join('') +
+                  `</ol>`
+                : `<p class="muted">No players recorded.</p>`;
+              const champLine = decided
+                ? `<p>🏆 Champion: <strong>${esc(champName)}</strong></p>`
+                : `<p>🏆 Top seed: <strong>${esc(champName)}</strong> <span class="muted">(tournament result not recorded)</span></p>`;
+              return (
+                `<h3>Season ${s.n} <span class="muted">— ended ${esc(formatWhen(s.closed_at, c.env.TIMEZONE))}</span></h3>` +
+                champLine +
+                `<p class="muted">Special Players (invited to the tournament):</p>${list}`
+              );
+            }),
+        )
+      ).join('')
     : `<p class="muted">No seasons completed yet — the first one ends at your first Special Players tournament.</p>`;
 
   const body =

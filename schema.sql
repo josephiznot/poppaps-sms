@@ -37,7 +37,8 @@ CREATE TABLE IF NOT EXISTS points_ledger (
   id           TEXT PRIMARY KEY,
   member_phone TEXT NOT NULL,
   game_id      TEXT NOT NULL,
-  points       INTEGER NOT NULL,
+  points       INTEGER NOT NULL,        -- season points; 0 for tournament rows (D5)
+  place        INTEGER,                 -- finishing place 1..5 (records rank even when points=0)
   awarded_at   TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_points_member ON points_ledger(member_phone);

@@ -8,6 +8,13 @@ export function pointsForPlace(zeroBasedIndex: number): number {
   return PLACE_POINTS[zeroBasedIndex] ?? 0;
 }
 
+const ORDINALS = ['1st', '2nd', '3rd', '4th', '5th'] as const;
+
+/** Human label for a finishing place (1→"1st" … 5→"5th"); "—" for null/out of range. */
+export function placeOrdinal(place: number | null | undefined): string {
+  return place && place >= 1 && place <= ORDINALS.length ? ORDINALS[place - 1]! : '—';
+}
+
 /** Card ranks for the standings badges, best first: 1st = A … 13th = 2. */
 export const RANK_CARDS = ['A', 'K', 'Q', 'J', '10', '9', '8', '7', '6', '5', '4', '3', '2'] as const;
 

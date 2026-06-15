@@ -36,7 +36,9 @@ page**, all built for **minimal effort**.
 - **Games** — a scheduled game night (`startsAt`, `location`, `isTournament`,
   reminder-sent, etc.).
 - **PointsLedger** — append-only: one row per member per game (`memberPhone`,
-  `gameId`, `points`, `awardedAt`). Never mutated; corrections are new rows.
+  `gameId`, `points`, `place`, `awardedAt`). Never mutated; corrections are new
+  rows. `place` = finishing rank 1..5; **tournament rows store `place` with
+  `points = 0`** so ranks are kept while standings stay untouched (ADR-0007).
 - **Attendance** — append-only, **host-marked** on the post-game admin screen
   (`memberPhone`, `gameId`, `timestamp`). No player self-check-in.
 - **Seasons** — append-only season-close log (`closedAt`, top-8 `snapshot`);
@@ -47,7 +49,9 @@ page**, all built for **minimal effort**.
 ### Points rules (exact — top 5 only)
 
 Host texts the night's finishing order; system awards: **1st = 5, 2nd = 4,
-3rd = 3, 4th = 2, 5th = 1**. 6th and below score 0.
+3rd = 3, 4th = 2, 5th = 1**. 6th and below score 0. The **finishing place is
+recorded for every game** (incl. tournaments, which store the place with 0
+points — ADR-0007); standings `SUM(points)` so tournament ranks never count.
 
 ### Quarterly "Special Players" tournament
 
@@ -171,4 +175,5 @@ See **[docs/adr/](docs/adr/)** and **[docs/requirements.md](docs/requirements.md
 (consolidated spec). ADRs: `0001` platform, `0002` data model & points, `0003`
 SMS admin *(superseded)*, `0004` rewards & attendance, `0005` interaction channels
 (SMS players-only + web admin + public board), `0006` tournament RSVPs
-(IN confirm + host-paced backfill).
+(IN confirm + host-paced backfill), `0007` tournament placements (ranks saved
+with 0 points; real champion on /seasons).

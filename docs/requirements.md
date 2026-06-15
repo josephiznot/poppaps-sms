@@ -4,7 +4,7 @@
 - **Date:** 2026-06-08
 - **Companion ADRs:** 0001 (platform), 0002 (data model & points), 0003
   (*superseded*), 0004 (rewards & attendance), 0005 (interaction channels),
-  0006 (tournament RSVPs).
+  0006 (tournament RSVPs), 0007 (tournament placements).
 
 This is the consolidated spec after the design conversation that (a) split the
 system into **SMS for players + a web app for admin + a public leaderboard**,
@@ -95,6 +95,9 @@ regress.
   screen** (system shows the tie; host picks) — never an arbitrary `LIMIT 8`.
 - FR-T5. The tournament game **does not award points** (decided 2026-06-08) — a
   one-off championship; the new season starts clean at the next regular game.
+  **The finishing order is still recorded** (ADR-0007): placements save with 0
+  points, so the champion + full standings are kept and shown publicly without
+  ever touching the season totals.
 - FR-T6. Invite copy may mention **more generous prizes**; prize amounts are a
   lounge decision (not software, §2.5 / D6).
 - FR-T7. Tournament invites are sent **only to SUBSCRIBED members**; an opted-out
@@ -152,6 +155,9 @@ regress.
 - FR-PUB5. A public **game page** (`/game/:id`) shows that game's placed finishers.
 - FR-PUB6. A public **seasons page** (`/seasons`) shows the current season plus past
   seasons' Special Players (top-8 snapshot) + champion (numbered chronologically).
+  **Champion = the linked tournament game's actual 1st-place finisher** once
+  results are entered (ADR-0007); until then it falls back to the top seed
+  (points leader at close), labelled as such.
 - FR-PUB7. **Player badges** on the standings (`lib/badges.ts`): **🔥 Hot** =
   top-5 finish in the player's last 2+ played games; **⚡ Comeback** = top-5 in
   their last played game after 4+ played games without scoring (mutually exclusive
@@ -192,7 +198,9 @@ regress.
   `source`, `createdAt`.
 - **Games** — `id`, `startsAt`, `location`, `isTournament`, `reminderSent`,
   `createdAt` (+ optional `buyIn`/`description`).
-- **PointsLedger** — append-only: `memberPhone`, `gameId`, `points`, `awardedAt`.
+- **PointsLedger** — append-only: `memberPhone`, `gameId`, `points`, `place`
+  (finishing rank 1..5), `awardedAt`. Tournament rows store the `place` with
+  `points = 0` (ADR-0007), so ranks are kept while standings stay untouched.
 - **Attendance** — append-only: `memberPhone`, `gameId`, `timestamp` (host-marked).
 - **Seasons** — append-only season-close log: `id`, `closedAt`, `snapshot` (top-8
   of the closing season). Current season = everything after `MAX(closedAt)`.

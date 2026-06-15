@@ -85,6 +85,7 @@ Text **JOIN** to your number from your phone to test the whole loop.
 > ```bash
 > npm run db:migrate:remote        # 0001 — recurring games
 > npm run db:migrate:0002:remote   # 0002 — tournament RSVPs
+> npm run db:migrate:0003:remote   # 0003 — finishing place on result rows
 > npm run deploy
 > ```
 
@@ -115,7 +116,9 @@ Real SMS sending still needs valid Twilio creds in `.dev.vars`; everything else
   continues. You can also schedule one-off games (date/time pickers; Central time;
   past dates OK for backfill) and mark one as the Special Players tournament.
 - **Post-game** (open a game) — tap who attended and pick the top 5; saving awards
-  5·4·3·2·1 points and fires any earned promos.
+  5·4·3·2·1 points and fires any earned promos. For a **tournament** game the
+  finishing order is still saved (so the champion + final standings are kept and
+  shown publicly) but it awards **no season points**.
 - **Standings** — current season.
 - **Tournament** — top 8 are pre-checked (adjust to break any tie), send invites,
   and the season resets (logical — nothing is deleted). Schedule the tournament

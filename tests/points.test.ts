@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pointsForPlace, crossedRewardThreshold, cardForRank, seasonStats } from '../src/lib/points';
+import { pointsForPlace, crossedRewardThreshold, cardForRank, seasonStats, placeOrdinal } from '../src/lib/points';
 
 describe('pointsForPlace', () => {
   it('awards 5·4·3·2·1 to the top five', () => {
@@ -22,6 +22,18 @@ describe('cardForRank', () => {
   it('returns null once the deck runs out (14th+)', () => {
     expect(cardForRank(13)).toBeNull();
     expect(cardForRank(20)).toBeNull();
+  });
+});
+
+describe('placeOrdinal', () => {
+  it('labels places 1..5', () => {
+    expect([1, 2, 3, 4, 5].map(placeOrdinal)).toEqual(['1st', '2nd', '3rd', '4th', '5th']);
+  });
+  it('returns a dash for null/undefined/out-of-range', () => {
+    expect(placeOrdinal(null)).toBe('—');
+    expect(placeOrdinal(undefined)).toBe('—');
+    expect(placeOrdinal(0)).toBe('—');
+    expect(placeOrdinal(6)).toBe('—');
   });
 });
 
