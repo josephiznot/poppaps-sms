@@ -26,6 +26,9 @@ REMINDER_LEAD_HOURS = "24"
 VALIDATE_TWILIO_SIGNATURE = "true"
 # Public site URL used in SMS links (opt-in Terms link, standings link).
 PUBLIC_BASE_URL = "https://poppaps.cards"
+# Repo /health queries for the "commits behind main" count. GIT_SHA/GIT_BRANCH/
+# BUILT_AT are injected at deploy time by scripts/deploy.mjs (not declared here).
+GITHUB_REPO = "josephiznot/poppaps-sms"
 
 # Created with `wrangler d1 create poker-sms` — paste the printed database_id here.
 [[d1_databases]]

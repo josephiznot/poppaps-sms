@@ -11,6 +11,7 @@ import type { Env } from './types';
 import { sms } from './routes/sms';
 import { admin } from './routes/admin';
 import { publicRoutes } from './routes/public';
+import { health } from './routes/health';
 import { ensureUpcomingGames, sendDueReminders } from './lib/jobs';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -28,9 +29,8 @@ app.use('*', async (c, next) => {
 
 app.route('/sms', sms);
 app.route('/admin', admin);
+app.route('/health', health); // public: which commit is live + how far behind main
 app.route('/', publicRoutes);
-
-app.get('/health', (c) => c.text('ok'));
 
 export default {
   fetch: (request: Request, env: Env, ctx: ExecutionContext) => app.fetch(request, env, ctx),

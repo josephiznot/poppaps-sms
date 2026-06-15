@@ -27,6 +27,7 @@ SMS goes out via Twilio's REST API. See [`docs/`](docs/) for the design + ADRs.
 | `/admin/*` | Host (password) | Schedule games; post-game winners + attendance; standings; run tournament; roster + promos. |
 | `GET /` | Public | Season standings + recent winners (first name + last initial only). |
 | `GET /rules` `/terms` `/privacy` | Public | Game rules + blind structure; program terms; privacy policy. |
+| `GET /health` | Public | JSON: which git commit is live, when it was built, and how many commits it is behind `main` on GitHub. The running SHA is baked in at deploy time (see below). |
 | Cron `0 * * * *` | — | Hourly: keep the biweekly game on the calendar, then text reminders for games within the lead window (tournament games remind their invitees only). |
 
 ---
@@ -62,6 +63,15 @@ npx wrangler secret put ADMIN_PASSWORD       # the password for /admin
 # 5. Deploy
 npm run deploy
 ```
+
+> **Always deploy with `npm run deploy`** — it runs `scripts/deploy.mjs`, which
+> bakes the current git commit into the Worker (`GIT_SHA`/`GIT_BRANCH`/`BUILT_AT`
+> deploy-time vars) so `/health` can report which commit is live. Commit/push
+> first, then deploy, so a healthy `/health` reads `commitsBehind: 0`.
+> (`npm run deploy:plain` is a bare `wrangler deploy` escape hatch — it skips the
+> SHA, and `/health` will show `unknown`.) The repo is public, so `/health`
+> queries GitHub unauthenticated; if you make it private, set a token with
+> `npx wrangler secret put GITHUB_TOKEN`.
 
 After the first deploy:
 

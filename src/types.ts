@@ -15,6 +15,15 @@ export interface Env {
   REMINDER_LEAD_HOURS: string;
   VALIDATE_TWILIO_SIGNATURE: string;
   PUBLIC_BASE_URL: string;
+  GITHUB_REPO: string; // owner/name queried by /health for the behind-count
+
+  // Optional GitHub token for /health — only needed if the repo is private.
+  GITHUB_TOKEN?: string;
+
+  // Injected at deploy time by scripts/deploy.mjs (absent in local `wrangler dev`).
+  GIT_SHA?: string;
+  GIT_BRANCH?: string;
+  BUILT_AT?: string;
 }
 
 export interface Member {

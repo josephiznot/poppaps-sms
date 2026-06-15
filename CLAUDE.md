@@ -84,8 +84,10 @@ roster only**, never the whole list (`tournament_rsvps` table).
 - **Public** (no login, all on the Worker — not GitHub Pages): current-season
   standings at `/`, a game's winners at `/game/:id`, **season history** (past
   seasons' Special Players + champion) at `/seasons`, **game rules** at `/rules`,
-  **program terms** at `/terms`, **privacy** at `/privacy`. Names shown as **first
-  name + last initial only**. Ace-of-spades favicon (inline SVG in `lib/html.ts`).
+  **program terms** at `/terms`, **privacy** at `/privacy`, and a JSON **`/health`**
+  (which git commit is live + how many commits behind `main`; SHA baked in at
+  deploy time — see Key commands). Names shown as **first name + last initial
+  only**. Ace-of-spades favicon (inline SVG in `lib/html.ts`).
 
 ## Roadmap / status
 
@@ -116,6 +118,7 @@ src/
     sms.ts               Twilio webhook (player intents + name capture)
     admin.ts             Host web app (login, games, post-game, tournament, roster)
     public.ts            Public standings page
+    health.ts            Public /health: live commit + commits-behind-main check
   lib/
     db.ts                All D1 queries
     twilio.ts            Send (fetch) + signature validation (Web Crypto) + TwiML
@@ -128,6 +131,7 @@ src/
     html.ts              Server-rendered HTML layout
   views/                 policies.ts (privacy/terms) + rules.ts (game rules)
 migrations/              D1 migrations for already-deployed databases
+scripts/deploy.mjs       Deploy wrapper: bakes git SHA into the Worker for /health
 docs/                    requirements.md + ADRs + opt-in/privacy pages
 tests/                   Vitest unit tests (messages, phone, points, schedule)
 ```
@@ -138,7 +142,7 @@ tests/                   Vitest unit tests (messages, phone, points, schedule)
 | --- | --- |
 | `npm install` | Install deps |
 | `npm run dev` | Local dev (Miniflare + local D1) at :8787 |
-| `npm run deploy` | `wrangler deploy` |
+| `npm run deploy` | Deploy via `scripts/deploy.mjs` — bakes git SHA in for `/health` (`deploy:plain` = bare `wrangler deploy`, no SHA) |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm test` | Vitest (messages, phone, points) |
 | `npm run db:schema:local` / `:remote` | Apply `schema.sql` |
