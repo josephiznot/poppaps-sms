@@ -71,6 +71,14 @@ to the **top 5 finishers only**:
 6th and below score 0. Each award is written as one row in **PointsLedger** with
 `awardedAt`.
 
+**Ties (added 2026-06-30).** The ledger already represents a tie as **two rows
+sharing the same `place`/`points`** (there is no uniqueness constraint on
+`place`, and standings just `SUM`), so no schema change is needed. The admin
+post-game screen exposes an optional **Ties** entry so a real tie — e.g. an exact
+chip-count tie at the 9:00 hard stop — can be recorded: both players get that
+place's points, and the public game page lists both at that place. This stays
+faithful to the append-event model (a tie is just two award rows).
+
 ### Season window, top-8 tournament, and reset — on demand, host-initiated
 
 The tournament is **planned manually by the host ~4× a year**; nothing schedules

@@ -166,7 +166,12 @@ admin.get('/games/:id', async (c) => {
   // Tournament games now prefill too — their ranks are stored with 0 points.
   const existing = await db.pointsForGame(c.env.DB, game.id);
   const placePhone: Record<number, string> = {};
-  for (const row of existing) if (row.place) placePhone[row.place] = row.member_phone;
+  const tieExtras: Array<{ place: number; phone: string }> = [];
+  for (const row of existing) {
+    if (!row.place) continue;
+    if (placePhone[row.place] === undefined) placePhone[row.place] = row.member_phone;
+    else tieExtras.push({ place: row.place, phone: row.member_phone }); // co-finisher (a tie)
+  }
   const attended = new Set(await db.attendeesForGame(c.env.DB, game.id));
   const editing = existing.length > 0;
 
@@ -177,6 +182,17 @@ admin.get('/games/:id', async (c) => {
   const winnerSelects = [1, 2, 3, 4, 5]
     .map((p) => `<label>${ordinal(p)} place<select name="place${p}">${options(placePhone[p] ?? '')}</select></label>`)
     .join('');
+
+  // Ties (rare): an exact chip-count tie at the 9:00 stop can put two players at
+  // the same place. Each tie row carries a place + the extra player sharing it;
+  // tie_place / tie_phone post as parallel arrays (one pair per row).
+  const placeOptions = (sel: number | '' = '') =>
+    `<option value="">—</option>` +
+    [1, 2, 3, 4, 5].map((p) => `<option value="${p}"${p === sel ? ' selected' : ''}>${ordinal(p)}</option>`).join('');
+  const tieRow = (place: number | '' = '', phone = '') =>
+    `<div class="row"><select name="tie_place">${placeOptions(place)}</select>` +
+    `<select name="tie_phone">${options(phone)}</select></div>`;
+  const tieRowsHtml = [...tieExtras.map((e) => tieRow(e.place, e.phone)), tieRow()].join('');
 
   const attendanceRows = members
     .map(
@@ -193,6 +209,9 @@ admin.get('/games/:id', async (c) => {
     `<h1>${title} — ${when}</h1>${note}` +
     `<form class="stack" method="post" action="/admin/games/${esc(game.id)}/result">` +
     `<h2>Top 5 (5·4·3·2·1 pts)</h2>${winnerSelects}` +
+    `<h2>Ties <span class="muted">(rare)</span></h2>` +
+    `<p class="muted">Only if two players truly tied for a place — e.g. a chip-count tie at the 9:00 stop. ` +
+    `Pick the place and the extra player who shares it; they get that place's points too. Leave blank otherwise.</p>${tieRowsHtml}` +
     `<h2>Who attended?</h2><p class="muted">Winners count automatically.</p>${attendanceRows}` +
     `<label class="row"><input type="checkbox" name="is_tournament" value="1"${game.is_tournament ? ' checked' : ''}> 🏆 Special Players tournament <span class="muted">(no season points)</span></label>` +
     `<button class="primary" type="submit">Save results</button></form>`;
@@ -219,12 +238,21 @@ admin.post('/games/:id/result', async (c) => {
   // are kept) but with 0 points, so standings are untouched. Dedup keeps a
   // player's highest place if listed twice.
   const winners: string[] = [];
-  for (const p of [1, 2, 3, 4, 5]) {
-    const phone = f.get(`place${p}`);
+  const place = async (phone: string | null | undefined, p: number) => {
     if (phone && !winners.includes(phone)) {
       winners.push(phone);
       await db.recordPlacement(c.env.DB, phone, game.id, p, isTournament ? 0 : pointsForPlace(p - 1), now);
     }
+  };
+  for (const p of [1, 2, 3, 4, 5]) await place(f.get(`place${p}`), p);
+
+  // Ties: optional extra co-finishers sharing a place (parallel tie_place /
+  // tie_phone arrays, one pair per row). A player already placed above is skipped.
+  const tiePlaces = f.getAll('tie_place');
+  const tiePhones = f.getAll('tie_phone');
+  for (let i = 0; i < tiePhones.length; i++) {
+    const p = Number(tiePlaces[i]);
+    if (p >= 1 && p <= 5) await place(tiePhones[i], p);
   }
 
   // Attendance = checked ∪ winners.

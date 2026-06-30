@@ -52,6 +52,10 @@ Host texts the night's finishing order; system awards: **1st = 5, 2nd = 4,
 3rd = 3, 4th = 2, 5th = 1**. 6th and below score 0. The **finishing place is
 recorded for every game** (incl. tournaments, which store the place with 0
 points — ADR-0007); standings `SUM(points)` so tournament ranks never count.
+**Ties are allowed:** two players can share a place (e.g. an exact chip-count
+tie at the 9:00 hard stop) — the post-game screen has an optional **Ties** row,
+and the ledger already represents it as two rows at the same `place`/`points`,
+which standings `SUM` naturally (ADR-0002).
 
 ### Quarterly "Special Players" tournament
 

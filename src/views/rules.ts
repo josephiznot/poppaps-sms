@@ -33,6 +33,14 @@ export function rulesPage(env: Env): Response {
     `<p><strong>Cards fly at 6:30 PM</strong> (Central). Come early to buy your cigars, grab a drink, find a seat, and get your buy-in. ` +
     `<strong>Hard stop at 9:00 PM</strong> — final ranks are decided by chip stack.</p>` +
 
+    `<h2>End of the night</h2>` +
+    `<ul>` +
+    `<li><strong>9:00 is a hard stop.</strong> The hand in progress finishes — no new hand is dealt after 9:00.</li>` +
+    `<li>If more than one player is still in at the stop, <strong>final places go by chip stack</strong> (most chips finishes higher).</li>` +
+    `<li><strong>Short stack, nothing to lose:</strong> when places are being decided by chips and you're behind, calling an all-in costs you nothing — you're already ranked where you are, so it's a free shot at moving up. Don't get bluffed off it.</li>` +
+    `<li><strong>The host stays out of live hands</strong> — no coaching either player mid-hand. Got a question or a disagreement with a call? Raise it with the host <strong>after the hand</strong>; the ruling in the moment is final.</li>` +
+    `</ul>` +
+
     `<h2>Buy-in &amp; buy-back</h2>` +
     `<ul>` +
     `<li>Your <strong>first cigar is your buy-in</strong> → <strong>2,000 chips</strong>.</li>` +

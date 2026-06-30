@@ -80,6 +80,9 @@ regress.
 - FR-P1. Members accumulate points over an **ongoing season = since the last season
   close** (not the calendar quarter).
 - FR-P2. Scoring, top 5 only: 1st=5, 2nd=4, 3rd=3, 4th=2, 5th=1; 6th+ = 0.
+  **Ties are allowed:** two players can share a place (e.g. an exact chip-count
+  tie at the 9:00 hard stop) — each gets that place's points, stored as two
+  ledger rows at the same `place` (ADR-0002).
 - FR-P3. Each award is one **append-only** PointsLedger row (`memberPhone`,
   `gameId`, `points`, `awardedAt`); corrections are compensating rows, never edits.
 - FR-P4. Standings = `SUM(points) WHERE awardedAt > lastSeasonClose GROUP BY
@@ -142,8 +145,9 @@ regress.
   can be **Skipped** (kept, won't regenerate) or **Deleted** (also removes its
   points + attendance).
 - FR-AD2. **Post-game** — for a game: tap attendance (FR-W1) and tap/order the top
-  5 (FR-P2), committed together. Re-opening a recorded game **pre-fills** it; re-saving
-  **replaces** that game's result (edit/correct — ADR-0002 scoped exception).
+  5 (FR-P2), committed together. An optional **Ties** row lets two players share a
+  place (FR-P2). Re-opening a recorded game **pre-fills** it (ties included);
+  re-saving **replaces** that game's result (edit/correct — ADR-0002 scoped exception).
 - FR-AD3. **Standings** — current season.
 - FR-AD4. **Run tournament** — FR-T2 sequence, including the tie-break (FR-T4).
 - FR-AD5. **Roster** — edit display names (FR-M3), mark promos redeemed (FR-W4),
@@ -164,8 +168,10 @@ regress.
   podium row tint retained.
 - FR-PUB3. The page URL may be shared in reminder texts.
 - FR-PUB4. A public **game-rules page** (`/rules`) shows the format, blind
-  structure, buy-in/buy-back, and cigar payouts — viewable ahead of time and a
-  reference when the host is out.
+  structure, buy-in/buy-back, cigar payouts, and the **end-of-night rules** (9:00
+  hard stop → chip-stack ranking → the short-stack "nothing to lose" note → host
+  stays out of live hands, disputes settled after the hand) — viewable ahead of
+  time and a reference when the host is out.
 - FR-PUB5. A public **game page** (`/game/:id`) shows that game's placed finishers.
 - FR-PUB6. A public **seasons page** (`/seasons`) shows the current season plus past
   seasons' Special Players (top-8 snapshot) + champion (numbered chronologically).

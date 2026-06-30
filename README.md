@@ -126,9 +126,11 @@ Real SMS sending still needs valid Twilio creds in `.dev.vars`; everything else
   continues. You can also schedule one-off games (date/time pickers; Central time;
   past dates OK for backfill) and mark one as the Special Players tournament.
 - **Post-game** (open a game) — tap who attended and pick the top 5; saving awards
-  5·4·3·2·1 points and fires any earned promos. For a **tournament** game the
-  finishing order is still saved (so the champion + final standings are kept and
-  shown publicly) but it awards **no season points**.
+  5·4·3·2·1 points and fires any earned promos. An optional **Ties** row lets two
+  players share a place (a rare chip-count tie at the 9:00 stop) — both get that
+  place's points. For a **tournament** game the finishing order is still saved (so
+  the champion + final standings are kept and shown publicly) but it awards **no
+  season points**.
 - **Standings** — current season.
 - **Tournament** — top 8 are pre-checked (adjust to break any tie), send invites,
   and the season resets (logical — nothing is deleted). Schedule the tournament
