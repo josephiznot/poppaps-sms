@@ -86,7 +86,14 @@ export function unknownMessage(env: Env, subscribed = false): string {
 
 export function gameReminder(env: Env, game: Game): string {
   const when = formatWhen(game.starts_at, env.TIMEZONE);
-  const parts = [`${env.PROGRAM_NAME}: 🃏 Cards fly ${when} at ${game.location}.`];
+  // Tournament reminders only ever reach the invited roster (lib/jobs.ts), so
+  // "your seat" is always true — the distinct copy keeps an invitee from
+  // mistaking the night for a regular open game.
+  const parts = [
+    game.is_tournament
+      ? `${env.PROGRAM_NAME}: 🏆 Special Players tournament — your seat's waiting! Cards fly ${when} at ${game.location}. Invitation-only, not a regular game night.`
+      : `${env.PROGRAM_NAME}: 🃏 Cards fly ${when} at ${game.location}.`,
+  ];
   if (game.buy_in) parts.push(`Buy-in: ${game.buy_in}.`);
   if (game.description) parts.push(game.description);
   parts.push('Reply STOP to opt out.');

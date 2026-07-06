@@ -112,6 +112,20 @@ describe('game reminder copy', () => {
     expect(msg).toContain("Poppa P's Smoke Shoppe & Lounge");
     expect(msg).toContain('Reply STOP to opt out.');
   });
+
+  it('a regular game never reads as the tournament', () => {
+    expect(gameReminder(env, game)).not.toContain('tournament');
+  });
+
+  it('a tournament reminder is unmistakably not a regular game night', () => {
+    const msg = gameReminder(env, { ...game, is_tournament: 1 } as Game);
+    expect(msg).toContain('Special Players tournament');
+    expect(msg).toContain('Invitation-only');
+    expect(msg).toContain('not a regular game night');
+    expect(msg).toContain('Cards fly'); // still carries the when/where
+    expect(msg).toContain("Poppa P's Smoke Shoppe & Lounge");
+    expect(msg).toContain('Reply STOP to opt out.'); // compliance line stays
+  });
 });
 
 describe('unknown (catch-all) copy', () => {

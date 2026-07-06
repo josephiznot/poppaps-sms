@@ -77,7 +77,9 @@ invitee and offers one-click backfill invites to the **next players on the close
 season's board** (a ❌ declined seat is free to fill now; a ⏳ no-reply seat waits
 out the confirm-by date); the system never reassigns a seat on its own.
 Tournament-game reminders go to the **invited roster only**, never the whole list
-(`tournament_rsvps` table).
+(`tournament_rsvps` table), and carry **distinct copy** (🏆 "Special Players
+tournament … Invitation-only, not a regular game night") so they never read like
+a regular game reminder.
 
 ## Interaction surfaces (ADR-0005)
 
