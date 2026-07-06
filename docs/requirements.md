@@ -186,6 +186,12 @@ regress.
   games are excluded** from badge history (`attendanceHistory`). A one-line legend
   appears under the homepage standings **only when a badge is on screen**; the
   full explanation lives on `/rules`.
+- FR-PUB8. **Homepage banners** (ADR-0008): the "**Next game night**" hero (with
+  the text-JOIN-for-a-reminder nudge) always shows the next **regular** game —
+  never a tournament. An upcoming Special Players tournament renders as its own
+  visually distinct **invitation-only notice** ("not a regular game night", no
+  JOIN link) above the next-game hero, so regulars don't show up to an
+  invite-only table.
 
 ### 2.8 Backfill
 - FR-B1. The host can enter **completed past games** (FR-AD1 past dates + FR-AD2

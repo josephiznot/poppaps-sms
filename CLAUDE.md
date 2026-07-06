@@ -98,7 +98,10 @@ Tournament-game reminders go to the **invited roster only**, never the whole lis
   deploy time — see Key commands). Names shown as **first name + last initial
   only**. Standings use **numbered ranks**, an exclusive **face-card chip for the
   top 4** (A/K/Q/J), and a labelled **top-8 "tournament line"** divider.
-  Ace-of-spades favicon (inline SVG in `lib/html.ts`).
+  The homepage "Next game night" banner (JOIN nudge) always shows the next
+  **regular** game; an upcoming Special Players tournament gets a separate
+  **invitation-only notice** instead — never framed as the next open game
+  (ADR-0008). Ace-of-spades favicon (inline SVG in `lib/html.ts`).
 
 ## Roadmap / status
 
@@ -191,4 +194,5 @@ See **[docs/adr/](docs/adr/)** and **[docs/requirements.md](docs/requirements.md
 SMS admin *(superseded)*, `0004` rewards & attendance, `0005` interaction channels
 (SMS players-only + web admin + public board), `0006` tournament RSVPs
 (IN confirm + host-paced backfill), `0007` tournament placements (ranks saved
-with 0 points; real champion on /seasons).
+with 0 points; real champion on /seasons), `0008` public tournament visibility
+(invite-only notice, never "next game").

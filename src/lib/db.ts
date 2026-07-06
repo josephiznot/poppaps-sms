@@ -110,10 +110,18 @@ export async function listGames(db: D1Database): Promise<Game[]> {
   return r.results ?? [];
 }
 
-/** The next scheduled (non-cancelled) game after `nowIso`, if any — for the public banner. */
-export async function nextUpcomingGame(db: D1Database, nowIso: string): Promise<Game | null> {
+/**
+ * The next scheduled (non-cancelled) game after `nowIso`, if any — for the
+ * public banner. Pass `regularOnly` to skip invitation-only Special Players
+ * tournaments (the public board shows those as a separate invite-only notice,
+ * never as the "next game" open to everyone).
+ */
+export async function nextUpcomingGame(db: D1Database, nowIso: string, regularOnly = false): Promise<Game | null> {
   return db
-    .prepare('SELECT * FROM games WHERE cancelled=0 AND starts_at > ? ORDER BY starts_at ASC LIMIT 1')
+    .prepare(
+      `SELECT * FROM games WHERE cancelled=0 AND starts_at > ?${regularOnly ? ' AND is_tournament=0' : ''}
+       ORDER BY starts_at ASC LIMIT 1`,
+    )
     .bind(nowIso)
     .first<Game>();
 }

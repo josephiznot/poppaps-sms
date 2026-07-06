@@ -87,6 +87,8 @@ const STYLE = `
   .hero .card { min-width: 2.3rem; font-size: 1.25rem; padding: .32rem .42rem; }
   .hero strong { font-family: Georgia, serif; font-size: 1.15rem; }
   .hero .muted { color: #cfe3d6; }
+  .hero.tourney { background: #5b2227; }
+  .hero.tourney .muted { color: #ecd9c9; }
   @media (max-width: 480px) {
     .hero { padding: .6rem .75rem; gap: .6rem; margin-bottom: .9rem; }
     .hero .card { min-width: 1.9rem; font-size: 1.05rem; padding: .25rem .35rem; }

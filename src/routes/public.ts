@@ -73,15 +73,25 @@ publicRoutes.get('/', async (c) => {
   const idMap = await playerIdMap(rows.map((r) => r.phone));
   const idByPhone = new Map([...idMap].map(([id, phone]) => [phone, id]));
 
-  // Next-game banner — the auto-scheduler keeps the next biweekly game materialized.
-  const next = await db.nextUpcomingGame(c.env.DB, new Date().toISOString());
+  // Next-game banner — the auto-scheduler keeps the next biweekly game
+  // materialized. "Next game" is always the next REGULAR night (with the JOIN
+  // nudge); an upcoming Special Players tournament gets its own invite-only
+  // notice instead, so nobody shows up thinking it's open poker (ADR-0008).
+  const nowIso = new Date().toISOString();
+  const nextAny = await db.nextUpcomingGame(c.env.DB, nowIso);
+  const next = nextAny?.is_tournament ? await db.nextUpcomingGame(c.env.DB, nowIso, true) : nextAny;
   const joinLink =
     `<a href="sms:${c.env.TWILIO_FROM_NUMBER}?&amp;body=JOIN" style="color:#f7f1e3">` +
     `text JOIN to ${esc(formatUs(c.env.TWILIO_FROM_NUMBER))}</a>`;
+  const tournamentBanner = nextAny?.is_tournament
+    ? `<div class="hero tourney"><span class="card">🏆</span>` +
+      `<div><strong>Special Players tournament: ${esc(formatWhen(nextAny.starts_at, c.env.TIMEZONE))}</strong>` +
+      `<div class="muted">Invitation only — the season's top 8 play for the title. Not a regular game night` +
+      `${next ? '; the next one is below' : ''}. <a href="/seasons" style="color:#f7f1e3">Past champions</a></div></div></div>`
+    : '';
   const nextBanner = next
     ? `<div class="hero"><span class="card">🗓</span>` +
-      `<div><strong>Next game: ${esc(formatWhen(next.starts_at, c.env.TIMEZONE))}</strong>` +
-      `${next.is_tournament ? ' <span class="pill">🏆 Special Players</span>' : ''}` +
+      `<div><strong>Next game night: ${esc(formatWhen(next.starts_at, c.env.TIMEZONE))}</strong>` +
       `<div class="muted">${esc(next.location)} — ${joinLink} for a reminder · ` +
       `msg &amp; data rates may apply · <a href="/terms" style="color:#f7f1e3">terms</a></div></div></div>`
     : '';
@@ -126,6 +136,7 @@ publicRoutes.get('/', async (c) => {
 
   const body =
     `<h1>${esc(c.env.PROGRAM_NAME)}</h1>` +
+    tournamentBanner +
     nextBanner +
     `<h2>Current season standings</h2>` +
     raceLine +

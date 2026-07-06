@@ -17,6 +17,9 @@ Consequences,** and a **"Revisit if / Future revisions"** section.
 | [0003](0003-sms-command-surface-and-admin-auth.md) | SMS command router and admin-by-phone-allowlist | ⚠️ Superseded by 0005 |
 | [0004](0004-rewards-and-attendance.md) | Rewards and attendance (forward-looking) | Proposed (attendance-capture decided) |
 | [0005](0005-interaction-channels.md) | Interaction channels: SMS for players, web app for admin + public standings | Accepted (pending implementation) |
+| [0006](0006-tournament-rsvp.md) | Tournament seat RSVPs: CALL/FOLD confirm + host-paced backfill | Accepted (implemented) |
+| [0007](0007-tournament-placements.md) | Record tournament placements with zero points | Accepted (implemented) |
+| [0008](0008-public-tournament-visibility.md) | Upcoming tournament shown as an invite-only notice, never as "next game" | Accepted (implemented) |
 
 ## Context at a glance
 
