@@ -51,7 +51,11 @@ regress.
   info. Carrier-reserved keywords are never repurposed. The catch-all reply to
   unrecognized text is **status-aware**: JOIN is suggested only to non-members /
   opted-out numbers; an already-subscribed sender gets a reminder of their status
-  instead (STOP + HELP offered to everyone).
+  instead (STOP + HELP offered to everyone). **STOP gets no app reply** — the
+  opt-out is recorded and the webhook returns empty TwiML; Twilio's built-in
+  opt-out handling already sends the standard unsubscribe confirmation, and any
+  app reply would be blocked (Twilio error 21610) since the number is
+  unsubscribed by the time the reply is processed.
 - FR-R2. A game-night reminder goes out before each scheduled game, in
   America/Chicago, framed as a reminder (not gambling). **A Special Players
   tournament game is invite-only: its reminder goes to the invited (RSVP)

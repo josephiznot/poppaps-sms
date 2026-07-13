@@ -1,13 +1,12 @@
 /** POST /sms — Twilio inbound webhook. Player channel only (ADR-0005). */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { isValidTwilioSignature, twiml } from '../lib/twilio';
+import { isValidTwilioSignature, twiml, twimlEmpty } from '../lib/twilio';
 import {
   parseIntent,
   askNameMessage,
   nameConfirmedMessage,
   alreadyMemberMessage,
-  optOutMessage,
   helpMessage,
   unknownMessage,
   rsvpConfirmedMessage,
@@ -98,8 +97,11 @@ sms.post('/', async (c) => {
       return twiml(res.alreadySubscribed ? alreadyMemberMessage(c.env) : askNameMessage(c.env));
     }
     case 'OPT_OUT':
+      // Record the opt-out but send no reply: Twilio's built-in opt-out handling
+      // already unsubscribed the number and sent its standard confirmation, so a
+      // TwiML reply here would just be blocked with error 21610.
       await db.optOutMember(c.env.DB, from, now);
-      return twiml(optOutMessage(c.env));
+      return twimlEmpty();
     case 'HELP':
       return twiml(helpMessage(c.env));
     default:

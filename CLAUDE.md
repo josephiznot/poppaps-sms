@@ -173,7 +173,10 @@ tests/                   Vitest unit tests (messages, phone, points, schedule)
   **"game-night reminders," not gambling** (carriers scrutinize gambling content).
   Keep `messages.ts` copy and any Twilio campaign description matching this.
 - **Opt-out/HELP are mandatory and built in.** Never repurpose reserved carrier
-  keywords (STOP/HELP/etc.); player keywords win over admin commands.
+  keywords (STOP/HELP/etc.); player keywords win over admin commands. STOP is
+  recorded but gets **no app reply** (empty TwiML): Twilio's built-in opt-out
+  handling already sends the standard confirmation, and an app reply would be
+  blocked with error 21610.
 - **Validate the Twilio signature** on every inbound webhook (`X-Twilio-Signature`)
   — HMAC-SHA1 via Web Crypto in `lib/twilio.ts` (toggle with
   `VALIDATE_TWILIO_SIGNATURE`).

@@ -61,10 +61,6 @@ export function alreadyMemberMessage(env: Env): string {
   return `${env.PROGRAM_NAME}: You're already on the list. Reply STOP to cancel, HELP for help.`;
 }
 
-export function optOutMessage(env: Env): string {
-  return `${env.PROGRAM_NAME}: You're unsubscribed and won't get more texts. Reply JOIN to opt back in.`;
-}
-
 export function helpMessage(env: Env): string {
   return (
     `${env.PROGRAM_NAME}: reminders + promos for poker at Poppa P's. ` +
