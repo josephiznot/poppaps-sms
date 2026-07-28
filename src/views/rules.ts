@@ -16,7 +16,7 @@ const BLINDS: Array<{ level: string; blinds: string; start: string }> = [
   { level: '7', blinds: '300 / 600', start: '8:05 PM' },
   { level: '8', blinds: '400 / 800', start: '8:20 PM' },
   { level: '9', blinds: '500 / 1,000', start: '8:35 PM' },
-  { level: '10', blinds: '600 / 1,200', start: '8:50 PM' },
+  { level: '10', blinds: '1,000 / 2,000', start: '8:50 PM' },
 ];
 
 export function rulesPage(env: Env): Response {
