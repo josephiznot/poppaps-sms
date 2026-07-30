@@ -103,7 +103,9 @@ a regular game reminder.
   The homepage "Next game night" banner (JOIN nudge) always shows the next
   **regular** game; an upcoming Special Players tournament gets a separate
   **invitation-only notice** instead — never framed as the next open game
-  (ADR-0008). Ace-of-spades favicon (inline SVG in `lib/html.ts`).
+  (ADR-0008). Ace-of-spades favicon (inline SVG in `lib/html.ts`). Every page
+  carries a small "Built by Skooped" footer credit linking to skooped.io
+  (shared `layout()`).
 
 ## Roadmap / status
 

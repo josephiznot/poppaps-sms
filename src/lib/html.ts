@@ -102,6 +102,10 @@ const STYLE = `
   .stats .stat span { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em;
                       color: #6b6254; }
   .ok { color: #1d7a3f; } .warn { color: #a05a00; }
+  footer.site { max-width: 760px; margin: -1.4rem auto 1.6rem; padding: 0 1.4rem;
+                text-align: center; font-size: .78rem; }
+  footer.site a { color: #ecdfc3aa; text-decoration: none; }
+  footer.site a:hover { color: #ecdfc3; text-decoration: underline; }
 `;
 
 // Ace-of-spades favicon (inline SVG data URI — no asset file needed).
@@ -120,7 +124,9 @@ export function layout(title: string, body: string, nav = ''): Response {
     FAVICON +
     `<title>${esc(title)}</title><style>${STYLE}</style></head>` +
     `<body><header class="site"><a class="brand" href="/"><span class="spade">♠</span>Poppa P&#39;s</a>${nav}</header>` +
-    `<main>${body}</main></body></html>`;
+    `<main>${body}</main>` +
+    `<footer class="site"><a href="https://skooped.io">Built by Skooped</a></footer>` +
+    `</body></html>`;
   return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
