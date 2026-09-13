@@ -30,7 +30,7 @@ export interface PlayerGameRow {
 }
 
 export interface SeasonStats {
-  /** Games attended this season (tournaments included). */
+  /** Regular games attended this season. */
   games: number;
   /** 1st-place finishes (5-point rows). */
   wins: number;
@@ -40,10 +40,10 @@ export interface SeasonStats {
   points: number;
 }
 
-/** Profile-page stat strip. Tournament rows count as games but never score points (D5). */
+/** Regular-season performance: tournaments are excluded from every denominator. */
 export function seasonStats(rows: PlayerGameRow[]): SeasonStats {
-  const pts = rows.map((r) => (r.is_tournament ? 0 : (r.points ?? 0)));
-  const games = rows.length;
+  const pts = rows.filter((r) => !r.is_tournament).map((r) => r.points ?? 0);
+  const games = pts.length;
   const scored = pts.filter((p) => p > 0).length;
   return {
     games,

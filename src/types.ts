@@ -27,6 +27,7 @@ export interface Env {
 }
 
 export interface Member {
+  public_id?: string | null;
   phone: string;
   display_name: string | null;
   status: 'SUBSCRIBED' | 'UNSUBSCRIBED';
@@ -49,9 +50,14 @@ export interface Game {
   cancelled: number;
   series_date: string | null;
   created_at: string;
+  /** Stable effective scoring time; separate from when results were entered. */
+  scoring_at?: string | null;
+  results_recorded_at?: string | null;
+  result_version?: number;
 }
 
 export interface StandingRow {
+  public_id?: string | null;
   phone: string;
   display_name: string | null;
   total: number;

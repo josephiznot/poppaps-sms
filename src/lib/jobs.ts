@@ -3,6 +3,8 @@ import type { Env } from '../types';
 import * as db from './db';
 import { sendSms } from './twilio';
 import { gameReminder, promoMessage } from './messages';
+import { drainOutbox, queueDelivery } from './delivery';
+import { tournamentOffers, getTournamentPlan } from './tournament-db';
 import { crossedRewardThreshold } from './points';
 import { RECURRING, localDateInTz, addDaysToKey, seriesDatesBetween, zonedToUtcIso, gameLocalDates } from './schedule';
 
@@ -84,33 +86,68 @@ export async function ensureUpcomingGames(env: Env, now = new Date()): Promise<n
  * linked to a tournament game, nobody is reminded — better silent than leaking
  * an open invitation to the whole roster.
  */
-export async function sendDueReminders(env: Env, now = new Date()): Promise<{ games: number; sent: number }> {
+export async function sendDueReminders(env: Env, now = new Date()): Promise<{ games: number; queued: number }> {
   const leadHours = Number(env.REMINDER_LEAD_HOURS || '24');
   const cutoff = new Date(now.getTime() + leadHours * 3600 * 1000);
   const games = await db.gamesDueForReminder(env.DB, now.toISOString(), cutoff.toISOString());
-  if (games.length === 0) return { games: 0, sent: 0 };
+  if (games.length === 0) return { games: 0, queued: 0 };
 
   const phones = await db.listSubscribedPhones(env.DB);
-  let sent = 0;
+  let queued = 0;
   for (const game of games) {
-    let recipients = phones;
+    let recipients: Array<{ phone: string; offerId: string | null }> = phones.map((phone) => ({ phone, offerId: null }));
+    let planId: string | null = null;
+    let scheduleVersion = 1;
     if (game.is_tournament) {
-      const season = (await db.listSeasons(env.DB)).find((s) => s.snapshot.gameId === game.id);
-      const rsvps = season ? await db.rsvpsForSeason(env.DB, season.id) : [];
-      recipients = rsvps.map((r) => r.member_phone);
+      const found = await env.DB
+        .prepare("SELECT id FROM tournament_plans WHERE game_id=? AND status='ACTIVE'")
+        .bind(game.id)
+        .first<{ id: string }>();
+      const plan = found ? await getTournamentPlan(env.DB, found.id) : null;
+      const offers = plan ? await tournamentOffers(env.DB, plan.id) : [];
+      recipients = offers
+        .filter((offer) => offer.state === 'ACTIVE' || offer.state === 'CONFIRMED')
+        .map((offer) => ({ phone: offer.member_phone, offerId: offer.id }));
+      planId = plan?.id ?? null;
+      scheduleVersion = plan?.schedule_version ?? 1;
       if (recipients.length === 0) {
         console.log(JSON.stringify({ msg: 'tournament reminder skipped — no linked invites', gameId: game.id }));
-        await db.markReminderSent(env.DB, game.id);
         continue;
       }
     }
-    const res = await broadcast(env, recipients, gameReminder(env, game));
-    sent += res.sent;
-    await db.markReminderSent(env.DB, game.id);
-    console.log(JSON.stringify({ msg: 'reminder sent', gameId: game.id, tournament: !!game.is_tournament, ...res }));
+    const body = gameReminder(env, game);
+    for (const recipient of recipients) {
+      await queueDelivery(env.DB, {
+        logicalKey: `game:${game.id}:reminder:v${scheduleVersion}`,
+        recipient: recipient.phone,
+        kind: game.is_tournament ? 'TOURNAMENT_REMINDER' : 'REGULAR_REMINDER',
+        body,
+        now: now.toISOString(),
+        planId,
+        gameId: game.id,
+        offerId: recipient.offerId,
+        version: scheduleVersion,
+        expiresAt: game.starts_at,
+      });
+      queued++;
+    }
+    if (planId) {
+      await env.DB
+        .prepare(
+          `UPDATE games SET reminder_sent=1 WHERE id=? AND starts_at=?
+           AND EXISTS (SELECT 1 FROM tournament_plans WHERE id=? AND schedule_version=?)`,
+        )
+        .bind(game.id, game.starts_at, planId, scheduleVersion)
+        .run();
+    } else {
+      await env.DB.prepare('UPDATE games SET reminder_sent=1 WHERE id=? AND starts_at=?').bind(game.id, game.starts_at).run();
+    }
+    console.log(JSON.stringify({ msg: 'reminders queued', gameId: game.id, tournament: !!game.is_tournament, queued: recipients.length }));
   }
-  return { games: games.length, sent };
+  return { games: games.length, queued };
 }
+
+export { drainOutbox };
 
 /**
  * After attendance is recorded, award any newly-crossed promo thresholds and

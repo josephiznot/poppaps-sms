@@ -52,13 +52,13 @@ describe('seasonStats', () => {
     expect(seasonStats(rows)).toEqual({ games: 4, wins: 1, top5Rate: 50, points: 8 });
   });
 
-  it('counts tournament rows as games but never as points', () => {
+  it('excludes tournaments from regular-season performance', () => {
     const rows = [
       { is_tournament: 0, points: 5 },
       { is_tournament: 1, points: null }, // tournaments award no season points (D5)
       { is_tournament: 1, points: 5 }, // even a stray ledger row must not count
     ];
-    expect(seasonStats(rows)).toEqual({ games: 3, wins: 1, top5Rate: 33, points: 5 });
+    expect(seasonStats(rows)).toEqual({ games: 1, wins: 1, top5Rate: 100, points: 5 });
   });
 });
 

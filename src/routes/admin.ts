@@ -4,17 +4,19 @@ import { deleteCookie } from 'hono/cookie';
 import type { Env, Member } from '../types';
 import { layout, adminNav, esc } from '../lib/html';
 import { formatWhen, formatDateOnly } from '../lib/messages';
-import { pointsForPlace } from '../lib/points';
 import { setSession, requireAuth } from '../lib/auth';
-import { broadcast, awardRewardsForAttendees } from '../lib/jobs';
-import { tournamentInvite, seatOpenedInvite, formatConfirmBy } from '../lib/messages';
+import { awardRewardsForAttendees } from '../lib/jobs';
 import { RECURRING, to12h, zonedToUtcIso, gameLocalDates, localDateInTz } from '../lib/schedule';
 import * as db from '../lib/db';
+import { tournamentAdmin } from './tournament-admin';
+import { listTournamentPlans } from '../lib/tournament';
 
 export const admin = new Hono<{ Bindings: Env }>();
 
 // Auth gate for everything except the login/logout endpoints.
 admin.use('*', async (c, next) => {
+  const origin = c.req.header('Origin');
+  if(c.req.method==='POST' && origin && origin!==new URL(c.req.url).origin) return c.text('Cross-site form submission rejected.',403);
   const path = new URL(c.req.url).pathname;
   if (path === '/admin/login' || path === '/admin/logout') return next();
   return requireAuth(c, next);
@@ -57,6 +59,8 @@ admin.get('/', (c) => c.redirect('/admin/games'));
 
 admin.get('/games', async (c) => {
   const games = await db.listGames(c.env.DB);
+  const plans = await listTournamentPlans(c.env.DB);
+  const planByGame = new Map(plans.map(p=>[p.game_id,p]));
   const now = new Date().toISOString();
   const list = games.length
     ? `<table><thead><tr><th>Date</th><th></th></tr></thead><tbody>` +
@@ -67,9 +71,10 @@ admin.get('/games', async (c) => {
             : g.is_tournament
               ? ' <span class="pill">🏆</span>'
               : '';
+          const managed = planByGame.has(g.id);
           const primary = g.cancelled
             ? `<span class="muted">—</span>`
-            : `<a href="/admin/games/${esc(g.id)}">Results →</a>`;
+            : `<a href="/admin/games/${esc(g.id)}">${g.results_recorded_at ? 'Edit results' : g.starts_at < now ? 'Record results' : 'Results'} →</a>${managed ? ' · <a href="/admin/tournament">Tournament settings</a>' : ''}`;
           const skip =
             !g.cancelled && g.starts_at > now
               ? `<form method="post" action="/admin/games/${esc(g.id)}/cancel">` +
@@ -81,7 +86,7 @@ admin.get('/games', async (c) => {
             `<button type="submit" class="danger">Delete</button></form>`;
           const menu =
             `<details class="menu"><summary aria-label="More actions">⋯</summary>` +
-            `<div class="menu-body">${skip}${del}</div></details>`;
+            `<div class="menu-body">${managed ? '<a href="/admin/tournament">Change date or cancel</a>' : skip+del}</div></details>`;
           return (
             `<tr><td>${esc(formatDateOnly(g.starts_at, c.env.TIMEZONE))}${tag}</td>` +
             `<td>${primary} ${menu}</td></tr>`
@@ -92,27 +97,27 @@ admin.get('/games', async (c) => {
     : `<p class="muted">No games yet.</p>`;
 
   const form =
-    `<h2>Schedule a game</h2>` +
+    `<details><summary>Add an extra regular game or past result</summary>` +
     `<form class="stack" method="post" action="/admin/games">` +
     `<label>Date<input type="date" name="date" required></label>` +
-    `<label class="row"><input type="checkbox" name="is_tournament" value="1"> Special Players tournament</label>` +
     `<button class="primary" type="submit">Schedule</button>` +
     `<p class="muted">Every game uses these standard details ` +
-    `(change in <code>src/lib/schedule.ts</code> if they ever do):<br>` +
+    `(all times are Central):<br>` +
     `🕡 ${to12h(RECURRING.time)} ${esc(c.env.TIMEZONE)} · 📍 ${esc(RECURRING.location)} · ` +
     `🚬 ${esc(RECURRING.buyIn)} · 🃏 ${esc(RECURRING.description)}<br>` +
     `Past dates are allowed (backfill).</p>` +
-    `</form>`;
+    `</form></details>`;
 
   const dup =
     c.req.query('err') === 'dup'
       ? `<p class="warn">⚠️ A game already exists on that date — only one game per day. Delete the existing one if you need to replace it.</p>`
       : '';
-  return layout('Games', `<h1>Games</h1>${dup}${list}${form}`, adminNav);
+  return layout('Games', `<h1>Games</h1><p>Regular nights and quarterly tournaments schedule themselves. Record results after each game; <a href="/admin/tournament">change a tournament date or check exceptions</a>.</p>${dup}${list}${form}`, adminNav);
 });
 
 admin.post('/games', async (c) => {
   const f = new URLSearchParams(await c.req.text());
+  if(f.get('is_tournament')==='1') return c.text('Tournaments schedule automatically. Use the Tournament page to change a date.',409);
   const date = f.get('date') ?? '';
   if (!date) return c.redirect('/admin/games');
 
@@ -127,7 +132,7 @@ admin.post('/games', async (c) => {
     {
       starts_at: zonedToUtcIso(`${date}T${RECURRING.time}`, c.env.TIMEZONE),
       location: RECURRING.location,
-      is_tournament: f.get('is_tournament') === '1',
+      is_tournament: false,
       description: RECURRING.description,
       buy_in: RECURRING.buyIn,
     },
@@ -137,11 +142,15 @@ admin.post('/games', async (c) => {
 });
 
 admin.post('/games/:id/cancel', async (c) => {
+  const plan=(await listTournamentPlans(c.env.DB)).find(p=>p.game_id===c.req.param('id'));
+  if(plan) return c.redirect('/admin/tournament',303);
   await db.cancelGame(c.env.DB, c.req.param('id'));
   return c.redirect('/admin/games');
 });
 
 admin.post('/games/:id/delete', async (c) => {
+  const plan=(await listTournamentPlans(c.env.DB)).find(p=>p.game_id===c.req.param('id'));
+  if(plan) return c.text('Automatic tournaments retain their records. Cancel through the Tournament page.',409);
   await db.deleteGame(c.env.DB, c.req.param('id'));
   return c.redirect('/admin/games');
 });
@@ -190,8 +199,8 @@ admin.get('/games/:id', async (c) => {
     `<option value="">—</option>` +
     [1, 2, 3, 4, 5].map((p) => `<option value="${p}"${p === sel ? ' selected' : ''}>${ordinal(p)}</option>`).join('');
   const tieRow = (place: number | '' = '', phone = '') =>
-    `<div class="row"><select name="tie_place">${placeOptions(place)}</select>` +
-    `<select name="tie_phone">${options(phone)}</select></div>`;
+    `<div class="row"><label>Tied place<select name="tie_place">${placeOptions(place)}</select></label>` +
+    `<label>Tied player<select name="tie_phone">${options(phone)}</select></label></div>`;
   const tieRowsHtml = [...tieExtras.map((e) => tieRow(e.place, e.phone)), tieRow()].join('');
 
   const attendanceRows = members
@@ -208,7 +217,8 @@ admin.get('/games/:id', async (c) => {
   const body =
     `<h1>${title} — ${when}</h1>${note}` +
     `<form class="stack" method="post" action="/admin/games/${esc(game.id)}/result">` +
-    `<h2>Top 5 (5·4·3·2·1 pts)</h2>${winnerSelects}` +
+    `<input type="hidden" name="result_version" value="${game.result_version ?? 0}">` +
+    `<h2>Top 5 ${game.is_tournament ? '(no season points)' : '(5·4·3·2·1 pts)'}</h2>${winnerSelects}` +
     `<h2>Ties <span class="muted">(rare)</span></h2>` +
     `<p class="muted">Only if two players truly tied for a place — e.g. a chip-count tie at the 9:00 stop. ` +
     `Pick the place and the extra player who shares it; they get that place's points too. Leave blank otherwise.</p>${tieRowsHtml}` +
@@ -222,44 +232,35 @@ admin.get('/games/:id', async (c) => {
 admin.post('/games/:id/result', async (c) => {
   const game = await db.getGame(c.env.DB, c.req.param('id'));
   if (!game) return c.redirect('/admin/games');
+  if(game.starts_at > new Date().toISOString()) return c.text('Record results after the game has started.',409);
 
   const f = new URLSearchParams(await c.req.text());
   const now = new Date().toISOString();
   const isTournament = f.get('is_tournament') === '1';
+  if(!isTournament && (await listTournamentPlans(c.env.DB)).some(p=>p.game_id===game.id))
+    return c.text('A scheduled tournament cannot award regular-season points.',409);
 
-  // Re-entry replaces this game's result wholesale, so edits are clean (ADR-0002).
-  await db.clearGameResults(c.env.DB, game.id);
-  await db.clearAttendanceForGame(c.env.DB, game.id);
-
-  // Record the finishing place for every filled slot so the result is preserved
-  // for ANY game. Points follow the ACTUAL place selected (place 1 = 5 pts …
-  // place 5 = 1 pt). **Special Players tournament games award NO season points**
-  // (D5/ADR-0007): the rank is still saved (so the champion + finishing order
-  // are kept) but with 0 points, so standings are untouched. Dedup keeps a
-  // player's highest place if listed twice.
-  const winners: string[] = [];
-  const place = async (phone: string | null | undefined, p: number) => {
-    if (phone && !winners.includes(phone)) {
-      winners.push(phone);
-      await db.recordPlacement(c.env.DB, phone, game.id, p, isTournament ? 0 : pointsForPlace(p - 1), now);
-    }
-  };
-  for (const p of [1, 2, 3, 4, 5]) await place(f.get(`place${p}`), p);
-
-  // Ties: optional extra co-finishers sharing a place (parallel tie_place /
-  // tie_phone arrays, one pair per row). A player already placed above is skipped.
+  const placements: Array<{phone:string;place:number}> = [];
+  for (const p of [1,2,3,4,5]) {
+    const phone = f.get(`place${p}`);
+    if (phone) placements.push({phone,place:p});
+  }
   const tiePlaces = f.getAll('tie_place');
   const tiePhones = f.getAll('tie_phone');
   for (let i = 0; i < tiePhones.length; i++) {
     const p = Number(tiePlaces[i]);
-    if (p >= 1 && p <= 5) await place(tiePhones[i], p);
+    if (tiePhones[i]) placements.push({phone:tiePhones[i]!,place:p});
   }
 
-  // Attendance = checked ∪ winners.
-  const attendees = new Set<string>([...f.getAll('attend'), ...winners]);
-  for (const phone of attendees) await db.markAttendance(c.env.DB, phone, game.id, now);
-
-  await db.setGameTournament(c.env.DB, game.id, isTournament);
+  const attendees = new Set<string>([...f.getAll('attend'), ...placements.map(p=>p.phone)]);
+  try {
+    if (!f.has('result_version')) throw new Error('Reload this game to get its current result version.');
+    if(!placements.length) throw new Error('Record at least one finishing place. If the game did not happen, skip it instead.');
+    await db.replaceGameResult(c.env.DB,game.id,Number(f.get('result_version')),placements,[...attendees],isTournament,now);
+  } catch (error) {
+    const response = layout('Results not saved',`<h1>Results not saved</h1><p class="warn">${esc(String(error instanceof Error ? error.message : error))}</p><p><a href="/admin/games/${esc(game.id)}">Reload this game →</a></p>`,adminNav);
+    return new Response(response.body,{status:409,headers:response.headers});
+  }
   await awardRewardsForAttendees(c.env, [...attendees], now);
   return c.redirect('/admin/standings');
 });
@@ -277,214 +278,8 @@ admin.get('/standings', async (c) => {
   return layout('Standings', `<h1>Standings (this season)</h1>${table}`, adminNav);
 });
 
-// ---- tournament: pick 8, invite, reset ------------------------------------
-
-/**
- * RSVP tracker for the latest tournament (ADR-0006): who confirmed (replied
- * IN), who hasn't, who's next in line on the CLOSED season's leaderboard with
- * a one-click backfill invite. Returns '' once the tournament has happened
- * (or after 45 days if no game was ever attached).
- */
-async function rsvpTrackerHtml(env: Env, members: Member[]): Promise<string> {
-  const season = await db.latestSeason(env.DB);
-  if (!season) return '';
-  const rsvps = await db.rsvpsForSeason(env.DB, season.id);
-  if (rsvps.length === 0) return ''; // pre-RSVP season close (or nobody texted)
-
-  const nowIso = new Date().toISOString();
-  const game = season.snapshot.gameId ? await db.getGame(env.DB, season.snapshot.gameId) : null;
-  const staleNoGame = !game && Date.now() - new Date(season.closed_at).getTime() > 45 * 86400_000;
-  if ((game && game.starts_at <= nowIso) || staleNoGame) return '';
-
-  const nameByPhone = new Map(members.map((m) => [m.phone, m.display_name]));
-  const statusByPhone = new Map(members.map((m) => [m.phone, m.status]));
-  const snapshotInvited = season.snapshot.invited ?? [];
-  const nameOf = (phone: string) =>
-    nameByPhone.get(phone) ?? snapshotInvited.find((i) => i.phone === phone)?.name ?? phone;
-
-  // Snapshot order first (the original top 8), then backfills in invite order.
-  const rsvpByPhone = new Map(rsvps.map((r) => [r.member_phone, r]));
-  const ordered = [
-    ...snapshotInvited.map((i) => i.phone),
-    ...rsvps.map((r) => r.member_phone).filter((p) => !snapshotInvited.some((i) => i.phone === p)),
-  ];
-
-  let confirmed = 0;
-  let declined = 0;
-  const rows = ordered
-    .map((phone) => {
-      const rsvp = rsvpByPhone.get(phone);
-      let status: string;
-      if (!rsvp) {
-        status = `<span class="pill">🚫</span> <span class="muted">opted out — not texted</span>`;
-      } else if (rsvp.declined_at) {
-        declined++;
-        status = `<span class="pill">❌</span> declined ${esc(formatDateOnly(rsvp.declined_at, env.TIMEZONE))} <span class="muted">— seat free to fill</span>`;
-      } else if (rsvp.confirmed_at) {
-        confirmed++;
-        status = `<span class="pill">✅</span> confirmed ${esc(formatDateOnly(rsvp.confirmed_at, env.TIMEZONE))}`;
-      } else {
-        status = `<span class="pill">⏳</span> <span class="muted">no reply yet</span>`;
-      }
-      return `<tr><td>${esc(nameOf(phone))}</td><td>${status}</td></tr>`;
-    })
-    .join('');
-
-  // Next in line = the closed season's standings below the already-invited.
-  const prevClose = await db.seasonCloseBefore(env.DB, season.closed_at);
-  const closedStandings = await db.standings(env.DB, prevClose, season.closed_at);
-  const alreadyInvited = new Set(ordered);
-  const nextUp = closedStandings
-    .map((r, i) => ({ ...r, rank: i + 1 }))
-    .filter((r) => !alreadyInvited.has(r.phone))
-    .slice(0, 5);
-
-  const nextRows = nextUp.length
-    ? nextUp
-        .map((r) => {
-          const optedOut = statusByPhone.get(r.phone) !== 'SUBSCRIBED';
-          const action = optedOut
-            ? `<span class="muted">🚫 opted out</span>`
-            : `<form method="post" action="/admin/tournament/backfill">` +
-              `<input type="hidden" name="phone" value="${esc(r.phone)}">` +
-              `<button type="submit">Send invite</button></form>`;
-          return `<tr><td>#${r.rank} ${esc(r.display_name ?? r.phone)} <span class="muted">(${r.total} pts)</span></td><td>${action}</td></tr>`;
-        })
-        .join('')
-    : `<tr><td colspan="2" class="muted">Nobody left on last season's board.</td></tr>`;
-
-  const when = game ? ` — ${esc(formatWhen(game.starts_at, env.TIMEZONE))}` : '';
-  return (
-    `<h2>Seat confirmations${when}</h2>` +
-    `<p class="muted">${confirmed} confirmed, ${declined} declined of ${ordered.length}. Invitees reply ` +
-    `<strong>CALL</strong> to lock a seat or <strong>FOLD</strong> to pass. A declined (❌) seat is free to ` +
-    `give away now; for a no-reply (⏳) seat, wait out your confirm-by date. Either way, invite the next ` +
-    `player below — the system never reassigns a seat on its own.</p>` +
-    `<table><tbody>${rows}</tbody></table>` +
-    `<h3>Next in line (last season's board)</h3>` +
-    `<table><tbody>${nextRows}</tbody></table>`
-  );
-}
-
-admin.get('/tournament', async (c) => {
-  const since = await db.lastSeasonClose(c.env.DB);
-  const rows = await db.standings(c.env.DB, since);
-  const games = (await db.listGames(c.env.DB)).filter((g) => g.is_tournament === 1);
-  const members = await db.listMembers(c.env.DB);
-  const statusByPhone = new Map(members.map((m) => [m.phone, m.status]));
-  const tracker = await rsvpTrackerHtml(c.env, members);
-
-  // Opted-out players stay checkable (they earned their snapshot seat) — the
-  // 🚫 is informational only; the backend guarantees no text goes out.
-  const checkboxes = rows.length
-    ? rows
-        .map((r, i) => {
-          const optedOut = statusByPhone.get(r.phone) !== 'SUBSCRIBED';
-          return (
-            `<label class="row"><input type="checkbox" name="invite" value="${esc(r.phone)}"${i < 8 ? ' checked' : ''}> ` +
-            `#${i + 1} ${esc(r.display_name ?? r.phone)} <span class="muted">(${r.total} pts)</span>` +
-            (optedOut ? ` <span class="pill">🚫</span> <span class="muted">(opted out — won't be texted)</span>` : '') +
-            `</label>`
-          );
-        })
-        .join('') +
-      `<p class="muted">Players marked 🚫 have opted out of texts, so they're skipped when you send invites — they keep their seat in the records, but the system never texts an opted-out number.</p>`
-    : `<p class="muted">No standings yet — nobody to invite.</p>`;
-
-  const gameOptions =
-    `<option value="">(no specific game)</option>` +
-    games.map((g) => `<option value="${esc(g.id)}">${esc(formatWhen(g.starts_at, c.env.TIMEZONE))} — ${esc(g.location)}</option>`).join('');
-
-  const nowIso = new Date().toISOString();
-  const today = localDateInTz(new Date(), c.env.TIMEZONE); // min for the confirm-by picker
-  const hasUpcomingTournamentGame = games.some((g) => !g.cancelled && g.starts_at > nowIso);
-  const scheduleTip = hasUpcomingTournamentGame
-    ? ''
-    : `<p class="muted">💡 Schedule the tournament game first (<a href="/admin/games">Games</a>, tournament toggle) ` +
-      `so the invite carries the date and "confirm by" makes sense to players.</p>`;
-
-  const body =
-    `<h1>Special Players tournament</h1>` +
-    tracker +
-    `<h2>Run a new tournament</h2>` +
-    `<p class="muted">Top 8 are pre-checked. Adjust to break any tie, then send invites. ` +
-    `This <strong>resets the season</strong> (logical — nothing is deleted).</p>` +
-    scheduleTip +
-    `<form class="stack" method="post" action="/admin/tournament/run" ` +
-    `onsubmit="return confirm('Send tournament invites now and reset the season? The texts cannot be unsent. Your past points and attendance are NOT deleted.')">` +
-    `<label>Tournament game (optional)<select name="game_id">${gameOptions}</select></label>` +
-    `<label>Confirm-by date (optional — players see this date in the invite)` +
-    `<input type="date" name="confirm_by" min="${esc(today)}"></label>` +
-    checkboxes +
-    `<button class="primary" type="submit">Send invites &amp; reset season</button></form>`;
-
-  return layout('Tournament', body, adminNav);
-});
-
-// Backfill: text the next player on the closed season's board and add them to
-// the RSVP roster. Host-initiated only — no automated seat reassignment.
-admin.post('/tournament/backfill', async (c) => {
-  const f = new URLSearchParams(await c.req.text());
-  const phone = f.get('phone');
-  const season = await db.latestSeason(c.env.DB);
-  if (!phone || !season) return c.redirect('/admin/tournament');
-
-  const member = await db.getMember(c.env.DB, phone);
-  if (member?.status !== 'SUBSCRIBED') return c.redirect('/admin/tournament');
-
-  const game = season.snapshot.gameId ? await db.getGame(c.env.DB, season.snapshot.gameId) : null;
-  const now = new Date().toISOString();
-  await broadcast(c.env, [phone], seatOpenedInvite(c.env, game));
-  await db.createRsvp(c.env.DB, season.id, phone, now);
-  return c.redirect('/admin/tournament');
-});
-
-admin.post('/tournament/run', async (c) => {
-  const f = new URLSearchParams(await c.req.text());
-  const invited = f.getAll('invite');
-  if (invited.length === 0) return c.redirect('/admin/tournament');
-
-  const game = f.get('game_id') ? await db.getGame(c.env.DB, f.get('game_id')!) : null;
-  const now = new Date().toISOString();
-
-  // Snapshot names before reset so the close record is self-contained. An
-  // opted-out player keeps their earned seat in the snapshot (honest history,
-  // shows on /seasons) but is NEVER texted — STOP compliance is authoritative
-  // here (and again inside broadcast as defense in depth).
-  const snapshot: Array<{ phone: string; name: string | null; optedOut?: boolean }> = [];
-  const toText: string[] = [];
-  for (const phone of invited) {
-    const m = await db.getMember(c.env.DB, phone);
-    const entry: { phone: string; name: string | null; optedOut?: boolean } = { phone, name: m?.display_name ?? null };
-    if (m?.status === 'SUBSCRIBED') toText.push(phone);
-    else entry.optedOut = true;
-    snapshot.push(entry);
-  }
-  const optedOutCount = invited.length - toText.length;
-
-  // The picker posts a YYYY-MM-DD date; format it to a friendly label ("Sunday,
-  // June 21") for the invite text. (Still just text in the message — not enforced.)
-  const confirmByRaw = (f.get('confirm_by') ?? '').trim();
-  const confirmBy = confirmByRaw ? formatConfirmBy(confirmByRaw) : undefined;
-  const res = await broadcast(c.env, toText, tournamentInvite(c.env, game, confirmBy));
-  const seasonId = await db.closeSeason(c.env.DB, { invited: snapshot, gameId: game?.id ?? null, sent: res.sent }, now);
-  // RSVP rows only for players actually texted — opted-out seats stay in the
-  // snapshot (honest history) but can't be confirmed by SMS.
-  for (const phone of toText) await db.createRsvp(c.env.DB, seasonId, phone, now);
-
-  const optedOutNote =
-    optedOutCount > 0
-      ? ` ${optedOutCount} top-8 player${optedOutCount === 1 ? ' has' : 's have'} opted out of texts and ${optedOutCount === 1 ? 'was' : 'were'} not messaged;`
-      : '';
-  return layout(
-    'Tournament started',
-    `<h1>🏆 Invites sent</h1><p class="ok">Invited ${res.sent} player(s);${optedOutNote} season reset.</p>` +
-      `<p>Players reply <strong>IN</strong> to lock their seat — track confirmations on the ` +
-      `<a href="/admin/tournament">Tournament page</a>.</p>` +
-      `<p><a href="/admin/standings">View the fresh standings →</a></p>`,
-    adminNav,
-  );
-});
+// Tournament operations use the durable automatic workflow.
+admin.route('/tournament', tournamentAdmin);
 
 // ---- roster + rewards -----------------------------------------------------
 

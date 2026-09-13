@@ -1,5 +1,7 @@
 # ADR 0002 — Append-event data model and points scoring
 
+> Scheduling, season commitment and seat-lifecycle decisions are superseded by [ADR-0009](0009-automatic-tournaments.md), September 13, 2026. Earlier text below records the historical decision.
+
 - **Status:** Accepted (pending implementation)
 - **Date:** 2026-06-08
 

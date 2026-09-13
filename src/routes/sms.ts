@@ -2,6 +2,8 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { isValidTwilioSignature, twiml, twimlEmpty } from '../lib/twilio';
+import { updateDeliveryStatus } from '../lib/delivery';
+import { respondToTournamentOffer } from '../lib/tournament';
 import {
   parseIntent,
   askNameMessage,
@@ -11,6 +13,7 @@ import {
   unknownMessage,
   rsvpConfirmedMessage,
   rsvpDeclinedMessage,
+  tournamentOfferExpiredMessage,
 } from '../lib/messages';
 import * as db from '../lib/db';
 
@@ -24,11 +27,18 @@ export const sms = new Hono<{ Bindings: Env }>();
 async function confirmSeat(env: Env, from: string, now: string): Promise<string | null> {
   const member = await db.getMember(env.DB, from);
   if (member?.status !== 'SUBSCRIBED') return null;
+  const automatic = await respondToTournamentOffer(env, from, 'CONFIRM', new Date(now));
+  if (automatic.handled) {
+    return automatic.outcome === 'CONFIRMED'
+      ? rsvpConfirmedMessage(env, automatic.game)
+      : tournamentOfferExpiredMessage(env);
+  }
   const rsvp = await db.rsvpForLatestSeason(env.DB, from);
   if (!rsvp) return null;
-  await db.confirmRsvp(env.DB, rsvp.id, now);
   const season = await db.latestSeason(env.DB);
   const game = season?.snapshot.gameId ? await db.getGame(env.DB, season.snapshot.gameId) : null;
+  if (!game || game.cancelled || game.starts_at <= now) return tournamentOfferExpiredMessage(env);
+  await db.confirmRsvp(env.DB, rsvp.id, now);
   return rsvpConfirmedMessage(env, game);
 }
 
@@ -40,11 +50,41 @@ async function confirmSeat(env: Env, from: string, now: string): Promise<string 
 async function declineSeat(env: Env, from: string, now: string): Promise<string | null> {
   const member = await db.getMember(env.DB, from);
   if (member?.status !== 'SUBSCRIBED') return null;
+  const automatic = await respondToTournamentOffer(env, from, 'DECLINE', new Date(now));
+  if (automatic.handled) {
+    return automatic.outcome === 'DECLINED'
+      ? rsvpDeclinedMessage(env)
+      : tournamentOfferExpiredMessage(env);
+  }
   const rsvp = await db.rsvpForLatestSeason(env.DB, from);
   if (!rsvp) return null;
+  const season = await db.latestSeason(env.DB);
+  const game = season?.snapshot.gameId ? await db.getGame(env.DB, season.snapshot.gameId) : null;
+  if (!game || game.cancelled || game.starts_at <= now) return tournamentOfferExpiredMessage(env);
   await db.declineRsvp(env.DB, rsvp.id, now);
   return rsvpDeclinedMessage(env);
 }
+
+/** Signed Twilio delivery receipts. `/sms` is already the public Twilio mount,
+ * so provider callbacks use `/sms/status`. */
+sms.post('/status', async (c) => {
+  const raw = await c.req.text();
+  const params = Object.fromEntries(new URLSearchParams(raw)) as Record<string, string>;
+  if (c.env.VALIDATE_TWILIO_SIGNATURE !== 'false') {
+    const sig = c.req.header('X-Twilio-Signature') ?? null;
+    const ok = await isValidTwilioSignature(c.env.TWILIO_AUTH_TOKEN, sig, c.req.url, params);
+    if (!ok) return c.text('Invalid signature', 403);
+  }
+  await updateDeliveryStatus(
+    c.env,
+    params.MessageSid ?? '',
+    params.MessageStatus ?? '',
+    params.ErrorCode ?? null,
+    new Date(),
+    c.req.query('DeliveryId') ?? params.DeliveryId ?? null,
+  );
+  return twimlEmpty();
+});
 
 sms.post('/', async (c) => {
   const raw = await c.req.text();

@@ -34,10 +34,10 @@ export async function joinMember(
   } else {
     await db
       .prepare(
-        `INSERT INTO members (phone, status, awaiting_name, source, opted_in_at, created_at, updated_at)
-         VALUES (?, 'SUBSCRIBED', 1, ?, ?, ?, ?)`,
+        `INSERT INTO members (phone, status, awaiting_name, source, opted_in_at, created_at, updated_at,public_id)
+         VALUES (?, 'SUBSCRIBED', 1, ?, ?, ?, ?,?)`,
       )
-      .bind(phone, source, now, now, now)
+      .bind(phone, source, now, now, now,uid())
       .run();
   }
   return { askName: !hasName, alreadySubscribed };
@@ -53,12 +53,12 @@ export async function setMemberName(db: D1Database, phone: string, name: string,
 export async function optOutMember(db: D1Database, phone: string, now: string): Promise<void> {
   await db
     .prepare(
-      `INSERT INTO members (phone, status, awaiting_name, opted_out_at, created_at, updated_at)
-       VALUES (?, 'UNSUBSCRIBED', 0, ?, ?, ?)
+      `INSERT INTO members (phone, status, awaiting_name, opted_out_at, created_at, updated_at,public_id)
+       VALUES (?, 'UNSUBSCRIBED', 0, ?, ?, ?,?)
        ON CONFLICT(phone) DO UPDATE SET status='UNSUBSCRIBED', awaiting_name=0,
          opted_out_at=excluded.opted_out_at, updated_at=excluded.updated_at`,
     )
-    .bind(phone, now, now, now)
+    .bind(phone, now, now, now,uid())
     .run();
 }
 
@@ -222,14 +222,14 @@ export async function gameHasResults(db: D1Database, gameId: string): Promise<bo
 export async function standings(db: D1Database, sinceIso: string, untilIso?: string): Promise<StandingRow[]> {
   const r = await db
     .prepare(
-      `SELECT p.member_phone AS phone, m.display_name AS display_name,
-              SUM(p.points) AS total, MAX(p.awarded_at) AS last_award
+      `SELECT p.member_phone AS phone, m.display_name AS display_name, m.public_id,
+              SUM(p.points) AS total, MAX(CASE WHEN p.points > 0 THEN p.awarded_at END) AS last_award
        FROM points_ledger p
        LEFT JOIN members m ON m.phone = p.member_phone
        WHERE p.awarded_at > ? AND p.awarded_at <= ?
        GROUP BY p.member_phone
        HAVING total > 0
-       ORDER BY total DESC, last_award ASC`,
+       ORDER BY total DESC, last_award ASC, p.member_phone ASC`,
     )
     .bind(sinceIso, untilIso ?? '9999')
     .all<StandingRow>();
@@ -345,6 +345,55 @@ export async function clearGameResults(db: D1Database, gameId: string): Promise<
 
 export async function clearAttendanceForGame(db: D1Database, gameId: string): Promise<void> {
   await db.prepare('DELETE FROM attendance WHERE game_id=?').bind(gameId).run();
+}
+
+/** One all-or-nothing edit, including a database-enforced stale-write guard.
+ * The NOT NULL version constraint aborts/rolls back the entire D1 batch when
+ * another save won. No deletion or partial result can escape that rollback. */
+export async function replaceGameResult(
+  db: D1Database, gameId: string, expectedVersion: number,
+  placements: Array<{ phone: string; place: number }>, attendees: string[],
+  isTournament: boolean, recordedAt: string,
+): Promise<void> {
+  const game = await getGame(db, gameId);
+  if (!game || game.cancelled) throw new Error('This game is missing or cancelled.');
+  if (!Number.isInteger(expectedVersion) || expectedVersion < 0) throw new Error('Invalid result version.');
+  const earliest = await db.prepare('SELECT MIN(awarded_at) AS at FROM points_ledger WHERE game_id=?')
+    .bind(gameId).first<{at: string | null}>();
+  const effective = game.scoring_at ?? earliest?.at ?? game.starts_at;
+  if (isTournament !== !!game.is_tournament) {
+    const closed = await db.prepare("SELECT id FROM seasons WHERE json_extract(snapshot, '$.gameId')=? LIMIT 1")
+      .bind(gameId).first();
+    if (closed) throw new Error('A linked championship cannot be changed to a regular game.');
+  }
+  const normalized = new Map<string, number>();
+  for (const p of placements) {
+    if (!Number.isInteger(p.place) || p.place < 1 || p.place > 5) throw new Error('Places must be 1 through 5.');
+    normalized.set(p.phone, Math.min(normalized.get(p.phone) ?? 6, p.place));
+  }
+  const people = new Set([...attendees, ...normalized.keys()]);
+  for (const phone of people) if (!await getMember(db, phone)) throw new Error('A selected player is no longer on the roster.');
+  const statements = [
+    // A concurrent deletion must abort rather than leave orphaned results.
+    db.prepare(`INSERT INTO games(id,starts_at,location,created_at)
+      SELECT ?,NULL,'','' WHERE NOT EXISTS (SELECT 1 FROM games WHERE id=?)`).bind(gameId,gameId),
+    db.prepare(`UPDATE games SET result_version=CASE WHEN result_version=? AND cancelled=0 THEN result_version+1 ELSE NULL END,
+      scoring_at=?, results_recorded_at=?, is_tournament=? WHERE id=?`)
+      .bind(expectedVersion, effective, recordedAt, isTournament ? 1 : 0, gameId),
+    db.prepare('DELETE FROM points_ledger WHERE game_id=?').bind(gameId),
+    db.prepare('DELETE FROM attendance WHERE game_id=?').bind(gameId),
+  ];
+  for (const [phone, place] of normalized) statements.push(db.prepare(
+    'INSERT INTO points_ledger(id,member_phone,game_id,points,place,awarded_at) VALUES(?,?,?,?,?,?)')
+    .bind(uid(), phone, gameId, isTournament ? 0 : 6 - place, place, effective));
+  for (const phone of people) statements.push(db.prepare(
+    'INSERT INTO attendance(id,member_phone,game_id,created_at) VALUES(?,?,?,?)')
+    .bind(uid(), phone, gameId, effective));
+  try { await db.batch(statements); }
+  catch (error) {
+    if (String(error).includes('result_version')) throw new Error('Results changed in another window. Reload the game before saving again.');
+    throw error;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -508,6 +557,13 @@ export async function champion(db: D1Database, gameId: string): Promise<{ phone:
     )
     .bind(gameId)
     .first<{ phone: string; name: string | null }>();
+}
+
+export async function champions(db: D1Database, gameId: string): Promise<Array<{phone:string;name:string|null}>> {
+  const rows = await db.prepare(`SELECT p.member_phone AS phone,m.display_name AS name FROM points_ledger p
+    LEFT JOIN members m ON m.phone=p.member_phone WHERE p.game_id=? AND COALESCE(p.place,6-p.points)=1
+    ORDER BY p.member_phone`).bind(gameId).all<{phone:string;name:string|null}>();
+  return rows.results ?? [];
 }
 
 export interface RecentResultRow {
