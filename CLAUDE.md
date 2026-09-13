@@ -13,6 +13,21 @@ page**, all built for **minimal effort**.
 
 ## Current status — read before changing anything
 
+**September 13, 2026 policy change:** [ADR-0009](docs/adr/0009-automatic-tournaments.md)
+is authoritative over older manual-tournament descriptions below. The user wants
+automatic quarterly off-week tournament scheduling, invitations, season closure,
+reminders and clear-cut replacements. Routine host work is entering game results;
+date conflicts, missing results, cutoff ties and uncertain texts are exceptions.
+Default tournament: first off-week Monday each quarter, 18:30 Central; qualification
+and invitations fourteen calendar days before at 10:00; confirm deadline two days
+before at 18:00. Atomic persistent intent precedes provider sends; no blind retry
+of uncertain sends. Expired/replaced offers cannot reclaim seats. The system stays
+on Cloudflare/D1/Twilio and is completely separate from Skooped or other projects.
+The public footer credit has been removed. Do not load unrelated business records.
+Apply migrations 0005 then 0006 before deploying. Use Node 24+ for SQLite tests.
+Result edits preserve season attribution and use atomic, version-guarded replacement.
+Public profile IDs are stored random identifiers; always minimize public names.
+
 - **Implemented on Cloudflare Workers + D1 + Cron** (Hono). One Worker serves
   `POST /sms` (Twilio webhook), `/admin/*` (host web app, password-gated), `GET /`
   (public standings), plus an hourly reminder cron. The previous AWS SAM scaffold
@@ -48,7 +63,7 @@ page**, all built for **minimal effort**.
 
 ### Points rules (exact — top 5 only)
 
-Host texts the night's finishing order; system awards: **1st = 5, 2nd = 4,
+Host enters the night's finishing order in the admin app; system awards: **1st = 5, 2nd = 4,
 3rd = 3, 4th = 2, 5th = 1**. 6th and below score 0. The **finishing place is
 recorded for every game** (incl. tournaments, which store the place with 0
 points — ADR-0007); standings `SUM(points)` so tournament ranks never count.
@@ -57,29 +72,22 @@ tie at the 9:00 hard stop) — the post-game screen has an optional **Ties** row
 and the ledger already represents it as two rows at the same `place`/`points`,
 which standings `SUM` naturally (ADR-0002).
 
-### Quarterly "Special Players" tournament
+### Automatic quarterly tournament (ADR-0009)
 
-Held **4× a year, host-initiated** — the host plans/schedules it manually; the
-system does **not** auto-schedule it (no cron for the tournament). The system only
-needs to **be aware**: on demand, when the host is planning a tournament, it
-surfaces the **top 8 players by points** (`SUM(points)` over the scoring window,
-in Central Time) so the host can invite them via targeted broadcast to a special
-game on an off week.
+The hourly Worker schedules the first off-week Monday each quarter at 18:30
+Central. Invitations and qualification close happen fourteen days before at 10:00;
+replies are due two days before at 18:00. The host records results and changes dates
+only for conflicts. Missing results, insufficient standings, cutoff ties and
+uncertain delivery appear as exceptions in the admin Tournament page.
 
-**Seat RSVPs (ADR-0006):** invitees reply **CALL** to lock their seat or **FOLD**
-to decline (poker-themed, advertised; IN/YES and OUT/NO/PASS also accepted).
-**FOLD frees the seat but never unsubscribes** (that's STOP); RSVP is
-last-action-wins. The invite carries a host-picked confirm-by **date** (calendar
-picker → formatted into the text, e.g. "Reply CALL by Sunday, June 21") — never
-enforced in code; sending is guarded by a confirmation prompt (the SMS send is
-the only irreversible step). The admin Tournament page tracks ✅/❌/⏳/🚫 per
-invitee and offers one-click backfill invites to the **next players on the closed
-season's board** (a ❌ declined seat is free to fill now; a ⏳ no-reply seat waits
-out the confirm-by date); the system never reassigns a seat on its own.
-Tournament-game reminders go to the **invited roster only**, never the whole list
-(`tournament_rsvps` table), and carry **distinct copy** (🏆 "Special Players
-tournament … Invitation-only, not a regular game night") so they never read like
-a regular game reminder.
+The full board, qualifiers, season boundary, seat offers and unique outbound work
+are persisted atomically before sending. Opted-out qualifiers remain in historical
+records without being texted. Clear vacancies are filled from frozen standings;
+replacement ties need host selection. CALL confirms an active seat offer; FOLD
+releases it without unsubscribing. Expired or replaced invitations cannot reclaim
+seats. Reminder recipients are current offers only. STOP/HELP remain load-bearing.
+Per-recipient SID and status distinguish provider acceptance from delivery.
+Unknown transport outcomes never automatically retry.
 
 ## Interaction surfaces (ADR-0005)
 
@@ -103,9 +111,7 @@ a regular game reminder.
   The homepage "Next game night" banner (JOIN nudge) always shows the next
   **regular** game; an upcoming Special Players tournament gets a separate
   **invitation-only notice** instead — never framed as the next open game
-  (ADR-0008). Ace-of-spades favicon (inline SVG in `lib/html.ts`). Every page
-  carries a small "Built by Skooped" footer credit linking to skooped.io
-  (shared `layout()`).
+  (ADR-0008). Ace-of-spades favicon (inline SVG in `lib/html.ts`). The site has no external business credit or integration.
 
 ## Roadmap / status
 
@@ -113,10 +119,8 @@ a regular game reminder.
 2. **Members + opt-in name capture** — ✅ built (JOIN → name reply → display name).
 3. **Points tracking** — ✅ built (admin post-game entry; append-only ledger;
    public standings). (ADR-0002, ADR-0005)
-4. **Special Players tournament** — ✅ built (admin: top-8 → invite → logical
-   season reset). (ADR-0002)
-   - **Seat RSVPs** — ✅ built (reply IN to confirm; admin tracker + host-paced
-     next-in-line backfill; invitee-only tournament reminders). (ADR-0006)
+4. **Special Players tournament** — ✅ built (admin: automatic quarterly calendar → frozen qualification → durable invites). (ADR-0002)
+   - **Seat RSVPs** — ✅ built (reply IN to confirm; admin tracker + automatic clear-cut next-in-line backfill; invitee-only tournament reminders). (ADR-0006)
 5. **Rewards / attendance** — ✅ mechanism built (host-marked attendance →
    data-driven promos via SMS); concrete reward rules still forming —
    `seed.sql` has a placeholder. (ADR-0004)

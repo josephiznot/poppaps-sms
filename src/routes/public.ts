@@ -9,8 +9,9 @@ import { privacyPage, termsPage } from '../views/policies';
 import { rulesPage } from '../views/rules';
 import { badgesForAll } from '../lib/badges';
 import { cardForRank, seasonStats, placeOrdinal } from '../lib/points';
-import { playerIdMap } from '../lib/playerId';
 import * as db from '../lib/db';
+import { publicName } from '../lib/public-name';
+import { listTournamentPlans } from '../lib/tournament';
 
 export const publicRoutes = new Hono<{ Bindings: Env }>();
 
@@ -27,7 +28,7 @@ export function rankBadge(i: number): string {
 function faceCard(i: number): string {
   if (i > 3) return '';
   const r = cardForRank(i); // A, K, Q, J
-  return r ? ` <span class="card sm" title="Top 4">${r}<small>♠</small></span>` : '';
+  return r ? ` <span class="card sm" aria-hidden="true">${r}<small>♠</small></span>` : '';
 }
 
 function standingsTable(
@@ -37,22 +38,22 @@ function standingsTable(
 ): string {
   if (!rows.length) return `<p class="muted">No points yet this season — check back after the next game.</p>`;
   return (
-    `<table><thead><tr><th>Rank</th><th>Player</th><th style="text-align:right">Pts</th></tr></thead><tbody>` +
+    `<table><caption>Current points · qualification is provisional</caption><thead><tr><th scope="col">Position</th><th scope="col">Player</th><th scope="col" style="text-align:right">Points</th></tr></thead><tbody>` +
     rows
       .map((r, i) => {
         const chips = (badges[r.phone] ?? []).map((b) => `<span class="chip">${b}</span>`).join('');
         const cls = i < 3 ? ` class="r${i + 1}"` : '';
-        const name = esc(r.display_name ?? 'New player');
+        const name = esc(publicName(r.display_name));
         const pid = idByPhone?.get(r.phone); // opaque hash id — never the phone (ADR-0005)
         const nameHtml = pid ? `<a class="player" href="/player/${esc(pid)}">${name}</a>` : name;
         const row =
-          `<tr${cls}><td>${rankBadge(i)}</td><td>${nameHtml}${faceCard(i)}${chips}</td>` +
+          `<tr${cls}><td>${rankBadge(i)}</td><td>${nameHtml}${faceCard(i)}${chips ? `<span class="badges">${chips}</span>` : ''}</td>` +
           `<td style="text-align:right">${r.total}</td></tr>`;
         // Tournament-qualification cut: a labelled line after the top 8 (only
         // when there's a 9th player to separate from).
         const cut =
           i === 7 && rows.length > 8
-            ? `<tr class="cutline"><td colspan="3">Top 8 · Special Players tournament line</td></tr>`
+            ? `<tr class="cutline"><td colspan="3">${rows[8]?.total === r.total ? 'Tie at the cutoff · host decision required' : 'Current top-eight qualification line'}</td></tr>`
             : '';
         return row + cut;
       })
@@ -70,8 +71,7 @@ publicRoutes.get('/', async (c) => {
   const recent = await db.recentResults(c.env.DB, 10);
   const badges = badgesForAll(await db.attendanceHistory(c.env.DB));
   // Opaque profile-link ids for the players on the board (phone → id).
-  const idMap = await playerIdMap(rows.map((r) => r.phone));
-  const idByPhone = new Map([...idMap].map(([id, phone]) => [phone, id]));
+  const idByPhone = new Map(rows.filter(r=>r.public_id).map(r=>[r.phone,r.public_id!]));
 
   // Next-game banner — the auto-scheduler keeps the next biweekly game
   // materialized. "Next game" is always the next REGULAR night (with the JOIN
@@ -80,6 +80,11 @@ publicRoutes.get('/', async (c) => {
   const nowIso = new Date().toISOString();
   const nextAny = await db.nextUpcomingGame(c.env.DB, nowIso);
   const next = nextAny?.is_tournament ? await db.nextUpcomingGame(c.env.DB, nowIso, true) : nextAny;
+  const scheduled = (await listTournamentPlans(c.env.DB)).filter(p=>p.status!=='CANCELLED' && p.status!=='COMPLETED' && p.planned_starts_at>nowIso).sort((a,b)=>a.planned_starts_at.localeCompare(b.planned_starts_at))[0];
+  const tournamentInfo = scheduled ? `<div class="season-note"><p><strong>Invitation-only tournament: ${esc(formatWhen(scheduled.planned_starts_at,c.env.TIMEZONE))}</strong></p>`+
+    `<p>${scheduled.season_id ? 'Qualification closed' : 'Qualification closes'}: ${esc(formatWhen(scheduled.qualification_cutoff,c.env.TIMEZONE))}. `+
+    `${scheduled.blocked_reason ? 'The host is resolving qualification details. ' : scheduled.season_id ? 'Invitations are being managed for the qualified players. ' : 'The top eight earn invitations; a tie for the final seats needs a host decision. '}`+
+    `</p><details><summary>Invitation details</summary><p>If invited, reply CALL by ${esc(formatWhen(scheduled.confirmation_deadline,c.env.TIMEZONE))}, or FOLD to pass. STOP ends texts. Joining reminders does not reserve a tournament seat.</p></details></div>` : '';
   const joinLink =
     `<a href="sms:${c.env.TWILIO_FROM_NUMBER}?&amp;body=JOIN" style="color:#f7f1e3">` +
     `text JOIN to ${esc(formatUs(c.env.TWILIO_FROM_NUMBER))}</a>`;
@@ -103,13 +108,14 @@ publicRoutes.get('/', async (c) => {
   if (leader && runnerUp) {
     const gap = leader.total - runnerUp.total;
     raceLine =
-      `<p class="muted"><strong>${esc(leader.display_name ?? 'New player')}</strong> leads — ` +
+      `<p class="muted"><strong>${esc(publicName(leader.display_name))}</strong> leads — ` +
       (gap === 0
-        ? `tied with ${esc(runnerUp.display_name ?? 'New player')}.`
-        : `${esc(runnerUp.display_name ?? 'New player')} is ${gap} back.`) +
+        ? `tied on points with ${esc(publicName(runnerUp.display_name))}.`
+        : `${esc(publicName(runnerUp.display_name))} is ${gap} point${gap===1 ? '' : 's'} back.`) +
       `</p>`;
   }
 
+  const recentWinners = new Map(await Promise.all(recent.map(async g => [g.id, (await db.champions(c.env.DB,g.id)).map(w=>publicName(w.name)).join(' & ')] as const)));
   const recentHtml = recent.length
     ? `<ul>` +
       recent
@@ -117,7 +123,7 @@ publicRoutes.get('/', async (c) => {
           (g) =>
             `<li><a href="/game/${esc(g.id)}">${esc(formatWhen(g.starts_at, c.env.TIMEZONE))}</a>` +
             `${g.is_tournament ? ' <span class="pill">🏆</span>' : ''}` +
-            `${g.winner ? ` — won by <strong>${esc(g.winner)}</strong>` : ''}</li>`,
+            `${recentWinners.get(g.id) ? ` — won by <strong>${esc(recentWinners.get(g.id))}</strong>` : ''}</li>`,
         )
         .join('') +
       `</ul>`
@@ -139,9 +145,13 @@ publicRoutes.get('/', async (c) => {
     tournamentBanner +
     nextBanner +
     `<h2>Current season standings</h2>` +
+    tournamentInfo +
     raceLine +
     `${standingsTable(rows, badges, idByPhone)}${badgeLegend}` +
-    `<p class="muted">Points reset after each Special Players tournament — see <a href="/seasons">past seasons</a>.</p>` +
+    `<p class="muted">Regular games award <strong>5, 4, 3, 2, 1 points</strong> for places 1–5. ` +
+    `The top eight at qualification close earn tournament invitations. Equal scores are displayed by earliest last scoring result; the host decides ties for the final seats. ` +
+    `<a href="/rules#qualification">How qualification works</a>.</p>` +
+    `<p class="muted">Points reset at qualification close, before the tournament. ${since ? `Current season began ${esc(formatWhen(since,c.env.TIMEZONE))}. ` : ''}<a href="/seasons">Past seasons</a>.</p>` +
     `<h2>Recent games</h2><p class="muted">Tap a game to see its winners.</p>${recentHtml}` +
     footerLinks;
 
@@ -163,17 +173,17 @@ publicRoutes.get('/game/:id', async (c) => {
       results
         .map(
           (r) =>
-            `<tr><td>${placeOrdinal(r.place)}</td><td>${esc(r.display_name ?? 'Player')}</td>` +
+            `<tr><td>${placeOrdinal(r.place)}</td><td>${esc(publicName(r.display_name))}</td>` +
             `<td>${game.is_tournament ? '—' : r.points}</td></tr>`,
         )
         .join('') +
       `</tbody></table>`
     : `<p class="muted">No results recorded for this game yet.</p>`;
 
-  const heading = game.is_tournament ? 'Final standings' : 'Winners';
+  const heading = game.is_tournament ? 'Recorded tournament results · top five' : 'Recorded results · top five';
   const body =
     `<h1>${when}${game.is_tournament ? ' <span class="pill">🏆 tournament</span>' : ''}</h1>` +
-    `<p class="muted">${esc(game.location)}${game.is_tournament ? ' — no season points; bragging rights only' : ''}</p>` +
+    `<p class="muted">${esc(game.location)}${game.is_tournament ? ' — championship results; no season points' : ''}</p>` +
     `<h2>${heading}</h2>${table}` +
     `<p class="muted" style="margin-top:2rem"><a href="/">← Standings</a> · <a href="/seasons">Seasons</a></p>`;
 
@@ -185,10 +195,8 @@ publicRoutes.get('/game/:id', async (c) => {
 // public URLs or markup (privacy promise, ADR-0005 §3).
 
 publicRoutes.get('/player/:id', async (c) => {
-  const members = await db.listMembers(c.env.DB);
-  const ids = await playerIdMap(members.map((m) => m.phone));
-  const phone = ids.get(c.req.param('id'));
-  const member = phone ? members.find((m) => m.phone === phone) : undefined;
+  const member = await c.env.DB.prepare('SELECT * FROM members WHERE public_id=?').bind(c.req.param('id')).first<import('../types').Member>();
+  const phone = member?.phone;
   if (!phone || !member) {
     return layout('Not found', `<h1>Player not found</h1><p><a href="/">← Standings</a></p>`, publicNav);
   }
@@ -196,15 +204,16 @@ publicRoutes.get('/player/:id', async (c) => {
   const since = await db.lastSeasonClose(c.env.DB);
   const history = await db.playerSeasonHistory(c.env.DB, phone, since);
   const stats = seasonStats(history);
-  const rank = (await db.standings(c.env.DB, since)).findIndex((r) => r.phone === phone);
+  const board = await db.standings(c.env.DB, since);
+  const rank = board.findIndex((r) => r.phone === phone);
   const chips = (badgesForAll(await db.attendanceHistory(c.env.DB))[phone] ?? [])
     .map((b) => `<span class="chip">${b}</span>`)
     .join('');
 
-  const name = member.display_name ?? 'New player';
+  const name = publicName(member.display_name);
   const statStrip =
     `<div class="stats">` +
-    `<div class="stat"><strong>${stats.games}</strong><span>Games</span></div>` +
+    `<div class="stat"><strong>${stats.games}</strong><span>Regular games</span></div>` +
     `<div class="stat"><strong>${stats.wins}</strong><span>Wins</span></div>` +
     `<div class="stat"><strong>${stats.top5Rate}%</strong><span>Top-5 rate</span></div>` +
     `<div class="stat"><strong>${stats.points}</strong><span>Points</span></div>` +
@@ -216,7 +225,7 @@ publicRoutes.get('/player/:id', async (c) => {
         .map((g) => {
           const pts = g.is_tournament ? 0 : (g.points ?? 0);
           return (
-            `<tr><td><a href="/game/${esc(g.game_id)}">${esc(formatWhen(g.starts_at, c.env.TIMEZONE))}</a></td>` +
+            `<tr><td><a href="/game/${esc(g.game_id)}">${esc(new Intl.DateTimeFormat('en-US',{timeZone:c.env.TIMEZONE,month:'short',day:'numeric',year:'numeric'}).format(new Date(g.starts_at)))}</a></td>` +
             `<td>${placeOrdinal(g.place)}${g.is_tournament ? ' <span class="pill">🏆 tournament</span>' : ''}</td>` +
             `<td style="text-align:right">${g.is_tournament ? '—' : pts}</td></tr>`
           );
@@ -226,10 +235,12 @@ publicRoutes.get('/player/:id', async (c) => {
     : `<p class="muted">No games this season yet.</p>`;
 
   const body =
-    `<h1>${rank >= 0 ? `${rankBadge(rank)} ` : ''}${esc(name)}${chips}</h1>` +
+    `<h1>${esc(name)}</h1><p>${rank >= 0 ? `Position ${rankBadge(rank)} · ${board[rank]?.total} points · ` : ''}` +
+    `${rank < 0 ? 'No season points yet.' : board[7] && board[8]?.total === board[7].total && board[rank]?.total === board[7].total ? 'Tied at the qualification cutoff — host decision required.' : rank < 8 ? 'Currently inside the top eight.' : `${(board[7]?.total ?? 0) - (board[rank]?.total ?? 0)} points behind the current cutoff; matching it creates a tie.`}</p>${chips}` +
+    `<p class="muted">Qualification is still open. Keep playing regular nights to earn points. If invited, reply CALL to confirm or FOLD to pass.</p>` +
     statStrip +
     `<h2>Game log</h2>${log}` +
-    `<p class="muted" style="margin-top:2rem">Season scope — resets at each Special Players tournament. ` +
+    `<p class="muted" style="margin-top:2rem">Statistics cover regular games in the current season. Points reset at qualification close, before the tournament. ` +
     `<a href="/seasons">Past seasons</a></p>` +
     `<p class="muted"><a href="/">← Standings</a></p>`;
 
@@ -253,34 +264,35 @@ publicRoutes.get('/seasons', async (c) => {
             .reverse() // most recent first
             .map(async (s) => {
               const invited = s.snapshot.invited ?? [];
-              const winner = s.snapshot.gameId ? await db.champion(c.env.DB, s.snapshot.gameId) : null;
-              const champPhone = winner?.phone ?? invited[0]?.phone ?? null;
-              const champName = winner?.name ?? invited[0]?.name ?? '—';
-              const decided = !!winner;
+              const winners = s.snapshot.gameId ? await db.champions(c.env.DB, s.snapshot.gameId) : [];
+              const champPhones = new Set(winners.map(w=>w.phone));
+              const champName = winners.map(w=>publicName(w.name)).join(' & ');
+              const decided = winners.length > 0;
               const list = invited.length
                 ? `<ol>` +
                   invited
-                    .map((p) => `<li>${p.phone === champPhone ? '🏆 ' : ''}${esc(p.name ?? 'Player')}</li>`)
+                    .map((p) => `<li>${champPhones.has(p.phone) ? '🏆 ' : ''}${esc(publicName(p.name))}</li>`)
                     .join('') +
                   `</ol>`
                 : `<p class="muted">No players recorded.</p>`;
               const champLine = decided
-                ? `<p>🏆 Champion: <strong>${esc(champName)}</strong></p>`
-                : `<p>🏆 Top seed: <strong>${esc(champName)}</strong> <span class="muted">(tournament result not recorded)</span></p>`;
+                ? `<p>🏆 ${winners.length > 1 ? 'Co-champions' : 'Champion'}: <strong>${esc(champName)}</strong></p>`
+                : `<p class="muted">Tournament results not recorded yet.</p>`;
               return (
-                `<h3>Season ${s.n} <span class="muted">— ended ${esc(formatWhen(s.closed_at, c.env.TIMEZONE))}</span></h3>` +
+                `<h3>Season ${s.n} <span class="muted">— qualification closed ${esc(formatWhen(s.closed_at, c.env.TIMEZONE))}</span></h3>` +
                 champLine +
-                `<p class="muted">Special Players (invited to the tournament):</p>${list}`
+                `${s.snapshot.gameId ? `<p><a href="/game/${esc(s.snapshot.gameId)}">Tournament results →</a></p>` : ''}` +
+                `<p class="muted">Season qualifiers (the playing roster may include replacements):</p>${list}`
               );
             }),
         )
       ).join('')
-    : `<p class="muted">No seasons completed yet — the first one ends at your first Special Players tournament.</p>`;
+    : `<p class="muted">No seasons completed yet.</p>`;
 
   const body =
     `<h1>Seasons</h1>` +
-    `<p class="muted">Each season runs until a Special Players tournament, then points reset.</p>` +
-    `<h2>Current season (in progress)</h2>${standingsTable(current)}` +
+    `<p class="muted">Points reset when tournament qualification closes. The championship is played afterward and awards no season points.</p>` +
+    `<p><a href="/">View current season standings →</a></p>` +
     `<h2>Past seasons</h2>${pastHtml}` +
     `<p class="muted" style="margin-top:2rem"><a href="/">← Standings</a></p>`;
 

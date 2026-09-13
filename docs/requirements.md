@@ -1,5 +1,18 @@
 # Requirements — Poppa P's Poker Night SMS
 
+> **Current operational policy (September 13, 2026):** [ADR-0009](adr/0009-automatic-tournaments.md)
+> supersedes the manual tournament scheduling, manual send/reset, host-paced
+> backfill and unrestricted RSVP-reclaim wording below. Tournaments auto-schedule
+> on the first off-week Monday each quarter. Qualification closes and invitation
+> work is persisted fourteen days before play, with the response deadline two days
+> before play. The host records results and handles only date conflicts, missing
+> results, cutoff ties and uncertain delivery. Clear vacancies are filled in frozen
+> board order automatically; replaced/expired invitations cannot reclaim seats.
+> A season close, full qualifying board, seat offers and unique outbound intent
+> commit atomically before provider dispatch. Delivery acceptance and receipt are
+> tracked separately. Public scoring, season timing, qualification and player-action
+> guidance must match this policy. This project has no connection to other businesses.
+
 - **Status:** Consolidated draft for build (supersedes the 2026-06-08 hashing draft)
 - **Date:** 2026-06-08
 - **Companion ADRs:** 0001 (platform), 0002 (data model & points), 0003
@@ -95,42 +108,18 @@ regress.
 - FR-P4. Standings = `SUM(points) WHERE awardedAt > lastSeasonClose GROUP BY
   memberPhone ORDER BY total DESC`, with a defined tie-break (FR-T4).
 
-### 2.4 Special Players tournament
-- FR-T1. **Host-initiated**, ~4×/yr, **never auto-scheduled**. The admin app
-  surfaces the top 8 on demand.
-- FR-T2. **Run-tournament sequence (this order):** (1) host schedules the
-  tournament game; (2) system **snapshots the top 8** of the closing season; (3)
-  sends invites to those 8; (4) **opens a new season** (records the close
-  boundary). Invites use pre-reset standings.
-- FR-T3. The reset is **logical** (a recorded season-close event), never a delete;
-  all history stays queryable.
-- FR-T4. **Ties at the 8th seat** are resolved by the **host on the Run-tournament
-  screen** (system shows the tie; host picks) — never an arbitrary `LIMIT 8`.
-- FR-T5. The tournament game **does not award points** (decided 2026-06-08) — a
-  one-off championship; the new season starts clean at the next regular game.
-  **The finishing order is still recorded** (ADR-0007): placements save with 0
-  points, so the champion + full standings are kept and shown publicly without
-  ever touching the season totals.
-- FR-T6. Invite copy may mention **more generous prizes**; prize amounts are a
-  lounge decision (not software, §2.5 / D6).
-- FR-T7. Tournament invites are sent **only to SUBSCRIBED members**; an opted-out
-  top-8 player keeps their seat in the season snapshot (marked `optedOut`) but is
-  **never texted** — enforced in the broadcast layer, surfaced in the admin UI.
-- FR-T8. **Seat RSVP (ADR-0006):** invitees reply **CALL** to lock their seat or
-  **FOLD** to decline (poker-themed, advertised in the invite); plain synonyms
-  (IN/YES, OUT/NO/PASS/"can't") are also accepted. **FOLD frees the seat but does
-  NOT unsubscribe** them. Both only act for a member with a pending invite;
-  carrier keywords (STOP/HELP) always win. The invite carries a **host-picked
-  confirm-by date** from a calendar picker, formatted into the message ("Reply
-  CALL by Sunday, June 21…") — shown to players, never enforced in code. Sending
-  is guarded by a confirmation prompt (the send is irreversible; the season reset
-  is not destructive). RSVP is last-action-wins and idempotent.
-- FR-T9. **Host-paced backfill:** the admin Tournament page tracks ✅ confirmed /
-  ❌ declined / ⏳ no reply / 🚫 opted out per invitee and lists the **next players
-  in line** from the *closed* season's standings, each with a one-click "seat
-  opened up" invite. A ❌ declined seat is free to fill immediately; a ⏳ no-reply
-  seat waits out the confirm-by date. **The system never reassigns a seat on its
-  own** — no deadline cron, no auto-promotion.
+### 2.4 Special Players tournament (ADR-0009)
+- FR-T1. Automatic quarterly scheduling: first Monday on the regular cadence's off week at 18:30 America/Chicago. Only the next future quarter occurrence is materialized; past/too-close initial dates are never caught up. Host overrides and cancellations persist.
+- FR-T2. At 10:00 Central fourteen calendar days before play, validate qualification and atomically persist the season boundary, complete ranked board, selected eight qualifiers, seat offers and unique outbound intent. Only then dispatch invitations. No routine host approval is required.
+- FR-T3. Season reset is a recorded boundary, never deletion. Complete frozen standings preserve replacement order after later result corrections. Edits cannot move a game to a new season.
+- FR-T4. Missing regular-game results, fewer than eight scoring players, and equal-point ties across the eighth seat block automatic invitations. The host selects only from the unresolved tied group; higher scoring players retain their places.
+- FR-T5. Tournament placements are recorded with zero points. Zero-point rows cannot affect scoring tie-breaks. Tied first-place finishers are co-winners in public summaries.
+- FR-T6. Invitations stay framed as game-night reminders for an invitation-only cigar-prize event; no cash or money wagering. The stored date and response deadline appear in the text.
+- FR-T7. Opted-out qualifiers retain their historical earned place and receive no SMS. Every dispatch rechecks subscription. Eligible replacements follow the frozen board; unresolved replacement ties require host choice.
+- FR-T8. CALL confirms an active offer; FOLD declines while preserving reminder subscription. STOP and HELP remain authoritative. Pending offers expire at their stored deadline. Replaced, expired, cancelled and completed-event offers cannot reclaim seats or promise attendance.
+- FR-T9. Clear vacancies are filled automatically until twenty-four hours before play. Replacement offers have bounded deadlines. At most eight active/confirmed offers may reserve seats. Current offers receive reminders; declined, replaced and opted-out players do not.
+- FR-T10. Per-recipient durable delivery state distinguishes queued, accepted, delivered, failed and unknown. Uncertain transport is never automatically resent. Repeated cron ticks, form submissions and callbacks do not duplicate logical work.
+- FR-T11. Rescheduling preserves the plan/game and any closed season, rejects conflicts, updates deadlines and sends one versioned notice to current invitees. Cancellation retires offers, suppresses stale work and does not regenerate that quarter.
 
 ### 2.5 Attendance & rewards
 - FR-W1. **Attendance is host-marked** on the post-game screen (tap who attended),
@@ -156,7 +145,7 @@ regress.
   place (FR-P2). Re-opening a recorded game **pre-fills** it (ties included);
   re-saving **replaces** that game's result (edit/correct — ADR-0002 scoped exception).
 - FR-AD3. **Standings** — current season.
-- FR-AD4. **Run tournament** — FR-T2 sequence, including the tie-break (FR-T4).
+- FR-AD4. **Tournament** — automatic schedule/status, date overrides, qualification exceptions and delivery recovery (FR-T2–T11).
 - FR-AD5. **Roster** — edit display names (FR-M3), mark promos redeemed (FR-W4),
   and see each member's **games-attended count** (supports attendance rewards).
 - FR-AD6. All admin routes require auth — a password login → signed session cookie
@@ -201,9 +190,10 @@ regress.
   invite-only table.
 
 ### 2.8 Backfill
-- FR-B1. The host can enter **completed past games** (FR-AD1 past dates + FR-AD2
-  winners/attendance); timestamped ledger rows sort correctly so standings compute
-  as if entered live.
+- FR-B1. The host can enter **completed past games**. New/backfilled results use
+  stable game time for season attribution. Edits preserve an existing game's
+  effective scoring time. Actual entry time is stored separately. Results and
+  attendance replace atomically with a version guard; stale edits are rejected.
 
 ---
 

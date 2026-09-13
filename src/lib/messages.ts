@@ -115,6 +115,36 @@ export function seatOpenedInvite(env: Env, game: Game | null): string {
   return `${head} ${where} Reply CALL to grab your seat or FOLD to pass. Reply STOP to opt out.`;
 }
 
+/** Automatic qualification invite. Deadlines are stored as instants; the copy
+ * derives its label from the same value shown in the admin UI. */
+export function automaticTournamentInvite(env: Env, game: Game, responseDeadline: string, replacement = false): string {
+  const lead = replacement
+    ? `${env.PROGRAM_NAME}: 🏆 A Special Players seat opened and you're next on the frozen leaderboard!`
+    : `${env.PROGRAM_NAME}: 🏆 You qualified for the Special Players tournament!`;
+  return (
+    `${lead} ${formatWhen(game.starts_at, env.TIMEZONE)} at ${game.location}. ` +
+    `Reply CALL by ${formatWhen(responseDeadline, env.TIMEZONE)} to reserve your seat or FOLD to pass. ` +
+    `Invitation-only, not a regular game night. Reply STOP to opt out.`
+  );
+}
+
+export function tournamentDateChangedMessage(env: Env, game: Game, responseDeadline?: string): string {
+  const deadline = responseDeadline ? ` Reply CALL by ${formatWhen(responseDeadline, env.TIMEZONE)} to confirm or FOLD to pass.` : '';
+  return (
+    `${env.PROGRAM_NAME}: 🏆 Special Players tournament update — cards now fly ` +
+    `${formatWhen(game.starts_at, env.TIMEZONE)} at ${game.location}. Your current RSVP still applies.` +
+    `${deadline} Reply STOP to opt out.`
+  );
+}
+
+export function tournamentCancelledMessage(env: Env): string {
+  return `${env.PROGRAM_NAME}: The upcoming Special Players tournament has been cancelled. Reply STOP to opt out.`;
+}
+
+export function tournamentOfferExpiredMessage(env: Env): string {
+  return `${env.PROGRAM_NAME}: That Special Players seat is no longer available. You're still on the regular game-reminder list. Reply STOP to opt out.`;
+}
+
 /** Reply to FOLD/decline — frees the seat but keeps them subscribed to reminders. */
 export function rsvpDeclinedMessage(env: Env): string {
   return (

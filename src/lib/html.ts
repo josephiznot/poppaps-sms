@@ -50,6 +50,15 @@ const STYLE = `
   button.primary { background: #7c2128; color: #fff; border-color: #7c2128; }
   button.danger { background: #fff; color: #9c1f1f; border-color: #c98a8a; }
   :focus-visible { outline: 2px solid #7c2128; outline-offset: 2px; }
+  header :focus-visible { outline-color: #fff4cc; }
+  .skip-link { position: absolute; left: .5rem; top: -6rem; background: #fff; padding: .7rem; z-index: 10; }
+  .skip-link:focus { top: .5rem; }
+  nav a { padding: .35rem .1rem; }
+  nav a[aria-current=page] { border-bottom-color: #ecdfc3; font-weight: 700; }
+  caption { text-align: left; font-size: .85rem; color: #6b6254; padding: .4rem 0; }
+  .season-note { padding: .8rem 1rem; background: #ede8da; border-radius: .6rem; margin-bottom: 1rem; }
+  .season-note p { margin: .3rem 0; }
+  .badges { display: block; margin-top: .15rem; }
   .row { display: flex; align-items: center; gap: .6rem; padding: .35rem 0; }
   .row input[type=checkbox] { width: 1.2rem; height: 1.2rem; }
   .muted { color: #6b6254; font-size: .9rem; }
@@ -90,6 +99,12 @@ const STYLE = `
   .hero.tourney { background: #5b2227; }
   .hero.tourney .muted { color: #ecd9c9; }
   @media (max-width: 480px) {
+    main { padding: 1rem; }
+    .stats { display: grid !important; grid-template-columns: 1fr 1fr; }
+    .hero { align-items: flex-start; }
+    th, td { padding: .5rem .3rem; }
+    .row { flex-wrap: wrap; }
+    input, select { max-width: 100%; min-width: 0; }
     .hero { padding: .6rem .75rem; gap: .6rem; margin-bottom: .9rem; }
     .hero .card { min-width: 1.9rem; font-size: 1.05rem; padding: .25rem .35rem; }
     .hero strong { font-size: 1.02rem; }
@@ -118,14 +133,19 @@ const FAVICON =
   `</svg>">`;
 
 export function layout(title: string, body: string, nav = ''): Response {
+  const active = nav.replace(/<a href="([^"]+)">/g, (match, href: string) => {
+    const label = title.toLowerCase();
+    const selected = href === '/' ? label.includes('standings') && !label.includes('admin')
+      : href === '/seasons' ? label.startsWith('seasons') : href === '/rules' ? label.includes('game rules') : false;
+    return selected ? `<a href="${href}" aria-current="page">` : match;
+  });
   const html =
     `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
     `<meta name="viewport" content="width=device-width, initial-scale=1">` +
     FAVICON +
     `<title>${esc(title)}</title><style>${STYLE}</style></head>` +
-    `<body><header class="site"><a class="brand" href="/"><span class="spade">♠</span>Poppa P&#39;s</a>${nav}</header>` +
-    `<main>${body}</main>` +
-    `<footer class="site"><a href="https://skooped.io">Built by Skooped</a></footer>` +
+    `<body><a class="skip-link" href="#main">Skip to content</a><header class="site"><a class="brand" href="/"><span class="spade" aria-hidden="true">♠</span>Poppa P&#39;s</a>${active}</header>` +
+    `<main id="main">${body}</main>` +
     `</body></html>`;
   return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }

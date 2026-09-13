@@ -34,7 +34,7 @@ SMS goes out via Twilio's REST API. See [`docs/`](docs/) for the design + ADRs.
 
 ## Prerequisites
 
-- **Node 20+**
+- **Node 24+**
 - A **Cloudflare account** (free plan is fine)
 - A **Twilio account** with your number — you need the **Account SID** + **Auth Token**
 
@@ -118,28 +118,24 @@ curl -X POST http://127.0.0.1:8787/sms --data 'From=%2B15555550123&Body=JOIN'
 Real SMS sending still needs valid Twilio creds in `.dev.vars`; everything else
 (admin UI, standings, scheduling, points) works fully offline.
 
-## Day-to-day (all in `/admin`)
+## Day-to-day
 
-- **Games** — the **biweekly game auto-appears** on the calendar (rule in
-  `src/lib/schedule.ts`: anchor date, every 14 days, fixed time/place/buy-in); use
-  **Skip** next to an upcoming game to cancel just that date and the series
-  continues. You can also schedule one-off games (date/time pickers; Central time;
-  past dates OK for backfill) and mark one as the Special Players tournament.
-- **Post-game** (open a game) — tap who attended and pick the top 5; saving awards
-  5·4·3·2·1 points and fires any earned promos. An optional **Ties** row lets two
-  players share a place (a rare chip-count tie at the 9:00 stop) — both get that
-  place's points. For a **tournament** game the finishing order is still saved (so
-  the champion + final standings are kept and shown publicly) but it awards **no
-  season points**.
-- **Standings** — current season.
-- **Tournament** — top 8 are pre-checked (adjust to break any tie), send invites,
-  and the season resets (logical — nothing is deleted). Schedule the tournament
-  game **first** so the invite carries the date; optionally type a "confirm by"
-  deadline that goes in the text. Players reply **IN** to lock their seat; the
-  page tracks ✅ confirmed / ⏳ no reply and lists the **next players in line**
-  (last season's board) with a one-click backfill invite when you decide a seat
-  has gone unclaimed — seats are never reassigned automatically.
-- **Roster** — tidy display names; mark earned promos redeemed.
+- **Record results** after each game. Choose finishers and attendance. Results save atomically; editing an old game preserves its season. Tournament results award zero season points.
+- **Tournament dates appear automatically**: first off-week Monday each quarter, 6:30 PM Central. Invitations and qualification close are fourteen days before play at 10:00 AM Central. Replies are due two days before play at 6:00 PM.
+- **No routine tournament button.** The hourly job freezes eight qualifiers, closes the scoring season, queues invitations and fills clear-cut vacancies. STOP is authoritative; FOLD declines only the seat. Expired/replaced offers cannot reclaim a seat.
+- **Tournament page**: reschedule when a date conflicts, resolve a final-seat tie, inspect missing results or uncertain delivery. Date changes after invitations notify current invitees once. Cancelled quarterly events are not regenerated.
+- **Roster**: tidy names and mark earned promos redeemed. Public names are always minimized; profile IDs are random.
+
+## Upgrading to automatic tournaments
+
+Read [ADR-0009](docs/adr/0009-automatic-tournaments.md). Apply migrations **0005 then 0006** before deploying this revision. Do not run the fresh schema against a legacy database as a substitute for migrations.
+
+1. Back up D1 and confirm no duplicate member/game ledger rows or duplicate season-close timestamps. Resolve anomalies explicitly; migrations never delete history to make a constraint pass.
+2. Apply migrations 0005 and 0006 using the matching npm scripts. 0005 preserves existing effective scoring times and creates random public profile IDs; old hashed profile bookmarks no longer resolve.
+3. Deploy the checked revision. Existing completed seasons remain historical; past tournaments are never re-invited. Initial automatic planning skips past or less-than-fourteen-day-away quarterly dates.
+4. Verify health and public/admin reads. Let the real cron run; **never send production texts as a smoke test**. Provider acceptance and delivered receipts are displayed separately.
+
+Local verification: Node 24+, npm ci, npm test, npm run typecheck, and a Wrangler dry-run build. Database tests use real in-memory SQLite and fake Twilio transport. No test credentials or production database are required.
 
 ## What I need from you (credentials/config)
 

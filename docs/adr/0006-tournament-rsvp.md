@@ -1,5 +1,7 @@
 # ADR 0006 — Tournament seat RSVPs: player-confirmed, host-paced backfill
 
+> Scheduling, season commitment and seat-lifecycle decisions are superseded by [ADR-0009](0009-automatic-tournaments.md), September 13, 2026. Earlier text below records the historical decision.
+
 - **Status:** Accepted (implemented)
 - **Date:** 2026-06-12
 - **Extends:** ADR-0002 (seasons/snapshot), ADR-0005 (SMS = players only)

@@ -4,11 +4,50 @@
  */
 import type { Env } from '../types';
 
-/** Send one SMS. Returns the message SID. Throws on a non-2xx Twilio response. */
-export async function sendSms(env: Env, to: string, body: string): Promise<string> {
+export interface TwilioSendResult {
+  sid: string;
+  status: string;
+}
+
+/** A definite provider response. `retryable` is intentionally limited to
+ * rate limits and provider/server failures; ambiguous fetch failures are not
+ * wrapped and the durable delivery layer records them as UNKNOWN. */
+export class TwilioSendError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code: string | null,
+    readonly retryable: boolean,
+  ) {
+    super(message);
+    this.name = 'TwilioSendError';
+  }
+}
+
+/** The request may have reached Twilio, so the outbox must not resend it. */
+export class TwilioAmbiguousError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TwilioAmbiguousError';
+  }
+}
+
+/** Send one SMS and return Twilio's initial acceptance state. */
+export async function sendSmsDetailed(
+  env: Env,
+  to: string,
+  body: string,
+  fetcher: typeof fetch = fetch,
+  deliveryId?: string,
+): Promise<TwilioSendResult> {
   const url = `https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Messages.json`;
   const form = new URLSearchParams({ To: to, From: env.TWILIO_FROM_NUMBER, Body: body });
-  const res = await fetch(url, {
+  if (env.PUBLIC_BASE_URL) {
+    const callback = new URL(`${env.PUBLIC_BASE_URL.replace(/\/$/, '')}/sms/status`);
+    if (deliveryId) callback.searchParams.set('DeliveryId', deliveryId);
+    form.set('StatusCallback', callback.toString());
+  }
+  const res = await fetcher(url, {
     method: 'POST',
     headers: {
       Authorization: 'Basic ' + btoa(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`),
@@ -17,10 +56,48 @@ export async function sendSms(env: Env, to: string, body: string): Promise<strin
     body: form,
   });
   if (!res.ok) {
-    throw new Error(`Twilio send failed (${res.status}): ${await res.text()}`);
+    const raw = await res.text();
+    let code: string | null = null;
+    let detail = raw;
+    try {
+      const parsed = JSON.parse(raw) as { code?: string | number; message?: string };
+      code = parsed.code == null ? null : String(parsed.code);
+      detail = parsed.message ?? raw;
+    } catch {
+      // Keep Twilio's raw response as the diagnostic when it is not JSON.
+    }
+    if (res.status >= 500) throw new TwilioAmbiguousError(`Twilio send outcome is uncertain (${res.status}): ${detail}`);
+    throw new TwilioSendError(
+      `Twilio send failed (${res.status}): ${detail}`,
+      res.status,
+      code,
+      res.status === 429,
+    );
   }
-  const data = (await res.json()) as { sid?: string };
-  return data.sid ?? '';
+  const data = (await res.json()) as { sid?: string; status?: string };
+  if (!data.sid) throw new TwilioAmbiguousError('Twilio accepted the request without returning a message SID');
+  return { sid: data.sid, status: data.status ?? 'accepted' };
+}
+
+/** Backward-compatible direct sender for legacy reward/admin paths. New
+ * automated work must queue through lib/delivery.ts before transport. */
+export async function sendSms(env: Env, to: string, body: string): Promise<string> {
+  return (await sendSmsDetailed(env, to, body)).sid;
+}
+
+/** Fetch current provider state for an accepted message. */
+export async function getSmsStatus(
+  env: Env,
+  sid: string,
+  fetcher: typeof fetch = fetch,
+): Promise<{ status: string; errorCode: string | null }> {
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Messages/${encodeURIComponent(sid)}.json`;
+  const res = await fetcher(url, {
+    headers: { Authorization: 'Basic ' + btoa(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`) },
+  });
+  if (!res.ok) throw new Error(`Twilio status lookup failed (${res.status}): ${await res.text()}`);
+  const data = (await res.json()) as { status?: string; error_code?: string | number | null };
+  return { status: data.status ?? 'unknown', errorCode: data.error_code == null ? null : String(data.error_code) };
 }
 
 /**

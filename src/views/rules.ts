@@ -29,6 +29,13 @@ export function rulesPage(env: Env): Response {
     `<p><strong>No-Limit Texas Hold'em.</strong> Biweekly. This page is open to anyone so you can see the format before you come.</p>` +
     `<p class="muted">📍 Poppa P's Smoke Shoppe &amp; Lounge — 1935 Mallory Ln, Suite 220, Franklin, TN 37067</p>` +
 
+    `<h2 id="qualification">Points &amp; tournament qualification</h2>` +
+    `<p>Regular games earn <strong>5, 4, 3, 2, 1 points</strong> for places 1–5. Players tied for a finishing place each earn that place's points. Sixth and below earn no points.</p>` +
+    `<p>A Special Players tournament is scheduled automatically about every three months on an off-week Monday. ` +
+    `The <strong>top eight at qualification close</strong> earn invitations. Points reset at that close, two weeks before the tournament, so regular games afterward count toward the next season. Tournament results award no season points.</p>` +
+    `<p>Equal point totals are displayed by the earliest last scoring result. A tie for the final available tournament seats is decided by the host. The line on the board is provisional until qualification closes.</p>` +
+    `<p>Keep playing regular game nights to earn points. If you receive an invitation, reply <strong>CALL</strong> by its deadline to confirm, or <strong>FOLD</strong> to decline while keeping game reminders. Unclaimed seats may go to the next player; an expired or replaced invitation cannot reclaim a seat. <strong>STOP</strong> ends texts; <strong>HELP</strong> gets program help. Joining reminders does not reserve a tournament seat.</p>` +
+
     `<h2>When</h2>` +
     `<p><strong>Cards fly at 6:30 PM</strong> (Central). Come early to buy your cigars, grab a drink, find a seat, and get your buy-in. ` +
     `<strong>Hard stop at 9:00 PM</strong> — final ranks are decided by chip stack.</p>` +
