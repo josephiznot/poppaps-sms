@@ -72,6 +72,11 @@ convenient; it does not replace the password gate.
 - Capture flow: player texts `JOIN` → system replies asking for **first name +
   last initial** → stored as the member's display name. The host can tidy/dedupe
   names on the admin Roster screen (since they show publicly).
+- Rejoin flow: after `STOP`, the player texts the carrier-standard `START` or
+  `UNSTOP`. Consent status changes back to subscribed while the existing display
+  name and public profile ID remain intact. Ask for a name only if none was ever
+  completed. Treat Twilio's `OptOutType` as authoritative and do not duplicate a
+  lifecycle confirmation Twilio already sent.
 - **Consent disclosure** (opt-in page + JOIN copy) must state that opting in means:
   reminders **and occasional promos**, results **tracked for points**, and **first
   name + last initial may appear on a public standings page**.

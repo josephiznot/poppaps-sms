@@ -68,7 +68,11 @@ regress.
   opt-out is recorded and the webhook returns empty TwiML; Twilio's built-in
   opt-out handling already sends the standard unsubscribe confirmation, and any
   app reply would be blocked (Twilio error 21610) since the number is
-  unsubscribed by the time the reply is processed.
+  unsubscribed by the time the reply is processed. A returning member uses
+  START or UNSTOP. Renewing consent preserves their stored display name and
+  public profile ID; the name prompt appears only when no usable name exists.
+  Twilio `OptOutType` is authoritative when present, and provider-handled
+  lifecycle messages do not receive a duplicate app confirmation.
 - FR-R2. A game-night reminder goes out before each scheduled game, in
   America/Chicago, framed as a reminder (not gambling). **A Special Players
   tournament game is invite-only: its reminder goes to the invited (RSVP)

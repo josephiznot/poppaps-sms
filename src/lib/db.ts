@@ -11,16 +11,20 @@ export async function getMember(db: D1Database, phone: string): Promise<Member |
   return db.prepare('SELECT * FROM members WHERE phone = ?').bind(phone).first<Member>();
 }
 
-/** Idempotent opt-in. Returns whether we should ask for a name / they were already in. */
+/**
+ * Idempotent opt-in. Existing identity fields are deliberately left untouched:
+ * rejoining changes consent state, not the member's name or public profile ID.
+ */
 export async function joinMember(
   db: D1Database,
   phone: string,
   source: string,
   now: string,
-): Promise<{ askName: boolean; alreadySubscribed: boolean }> {
+): Promise<{ askName: boolean; alreadySubscribed: boolean; reactivated: boolean }> {
   const existing = await getMember(db, phone);
-  const hasName = !!existing?.display_name;
+  const hasName = !!existing?.display_name?.trim();
   const alreadySubscribed = existing?.status === 'SUBSCRIBED' && hasName;
+  const reactivated = existing?.status === 'UNSUBSCRIBED';
   const awaiting = hasName ? 0 : 1;
 
   if (existing) {
@@ -40,7 +44,7 @@ export async function joinMember(
       .bind(phone, source, now, now, now,uid())
       .run();
   }
-  return { askName: !hasName, alreadySubscribed };
+  return { askName: !hasName, alreadySubscribed, reactivated };
 }
 
 export async function setMemberName(db: D1Database, phone: string, name: string, now: string): Promise<void> {

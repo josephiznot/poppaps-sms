@@ -9,6 +9,8 @@ import {
   askNameMessage,
   nameConfirmedMessage,
   alreadyMemberMessage,
+  welcomeBackMessage,
+  rejoinMessage,
   helpMessage,
   unknownMessage,
   rsvpConfirmedMessage,
@@ -101,7 +103,22 @@ sms.post('/', async (c) => {
 
   const now = new Date().toISOString();
   const intent = parseIntent(body);
-  const firstWord = body.trim().toLowerCase().split(/\s+/)[0] ?? '';
+  const firstWord = (body.trim().toLowerCase().split(/\s+/)[0] ?? '').replace(/[!.?,]+$/, '');
+  const optOutType = (params.OptOutType ?? '').trim().toUpperCase();
+
+  // Twilio has already sent the configured confirmation for these lifecycle
+  // webhooks. Mirror its consent state locally, then return no app-authored SMS.
+  if (optOutType === 'STOP') {
+    await db.optOutMember(c.env.DB, from, now);
+    return twimlEmpty();
+  }
+  if (optOutType === 'START') {
+    const result = await db.joinMember(c.env.DB, from, `sms:${body.trim().slice(0, 20)}`, now);
+    // Twilio already confirms renewed consent. Add only the missing identity
+    // prompt when this number has never supplied a usable display name.
+    return result.askName ? twiml(askNameMessage(c.env)) : twimlEmpty();
+  }
+  if (optOutType === 'HELP') return twimlEmpty();
 
   // Tournament-seat RSVP. A bare "YES" from a member with a pending invite also
   // confirms (people reply YES no matter what the message asks); for everyone
@@ -133,8 +150,18 @@ sms.post('/', async (c) => {
 
   switch (intent) {
     case 'OPT_IN': {
+      // After a provider-level opt-out, only carrier-standard reactivation words
+      // establish renewed consent. JOIN/SUBSCRIBE/POKER may reach this webhook
+      // while Twilio still blocks outbound messages, so they remain opted out.
+      if (member?.status === 'UNSUBSCRIBED' && !['start', 'unstop', 'yes'].includes(firstWord)) {
+        return twiml(rejoinMessage(c.env));
+      }
       const res = await db.joinMember(c.env.DB, from, `sms:${body.trim().slice(0, 20)}`, now);
-      return twiml(res.alreadySubscribed ? alreadyMemberMessage(c.env) : askNameMessage(c.env));
+      if (res.alreadySubscribed) return twiml(alreadyMemberMessage(c.env));
+      if (res.reactivated && !res.askName && member?.display_name) {
+        return twiml(welcomeBackMessage(c.env, member.display_name));
+      }
+      return twiml(askNameMessage(c.env));
     }
     case 'OPT_OUT':
       // Record the opt-out but send no reply: Twilio's built-in opt-out handling
@@ -146,6 +173,12 @@ sms.post('/', async (c) => {
       return twiml(helpMessage(c.env));
     default:
       // Only nudge JOIN at people who aren't currently subscribed.
-      return twiml(unknownMessage(c.env, member?.status === 'SUBSCRIBED'));
+      return twiml(
+        unknownMessage(
+          c.env,
+          member?.status === 'SUBSCRIBED',
+          member?.status === 'UNSUBSCRIBED',
+        ),
+      );
   }
 });
