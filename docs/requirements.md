@@ -109,7 +109,7 @@ regress.
   memberPhone ORDER BY total DESC`, with a defined tie-break (FR-T4).
 
 ### 2.4 Special Players tournament (ADR-0009)
-- FR-T1. Automatic quarterly scheduling: first Monday on the regular cadence's off week at 18:30 America/Chicago. Only the next future quarter occurrence is materialized; past/too-close initial dates are never caught up. Host overrides and cancellations persist.
+- FR-T1. Automatic quarterly scheduling: first Monday on the regular cadence's off week at 18:30 America/Chicago. The one-time 2026-Q4 transition is September 28, with September 7 as the last scoring game; the normal rule resumes in 2027. Only the next future occurrence is materialized. Host overrides and cancellations persist.
 - FR-T2. At 10:00 Central fourteen calendar days before play, validate qualification and atomically persist the season boundary, complete ranked board, selected eight qualifiers, seat offers and unique outbound intent. Only then dispatch invitations. No routine host approval is required.
 - FR-T3. Season reset is a recorded boundary, never deletion. Complete frozen standings preserve replacement order after later result corrections. Edits cannot move a game to a new season.
 - FR-T4. Missing regular-game results, fewer than eight scoring players, and equal-point ties across the eighth seat block automatic invitations. The host selects only from the unresolved tied group; higher scoring players retain their places.

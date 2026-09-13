@@ -42,11 +42,11 @@ async function seedScoring(db: D1Database, points = [10, 9, 8, 7, 6, 5, 4, 3]): 
 
 describe('quarterly tournament dates', () => {
   it('uses the first off-week Monday and keeps Chicago DST offsets', () => {
-    expect(tournamentOccurrenceForQuarter(2026, 4)).toBe('2026-10-12T23:30:00.000Z');
+    expect(tournamentOccurrenceForQuarter(2026, 4)).toBe('2026-09-28T23:30:00.000Z');
     expect(tournamentOccurrenceForQuarter(2027, 1)).toBe('2027-01-05T00:30:00.000Z');
-    expect(tournamentDeadlines('2026-10-12T23:30:00.000Z')).toEqual({
-      qualificationCutoff: '2026-09-28T15:00:00.000Z',
-      confirmationDeadline: '2026-10-10T23:00:00.000Z',
+    expect(tournamentDeadlines('2026-09-28T23:30:00.000Z')).toEqual({
+      qualificationCutoff: '2026-09-14T15:00:00.000Z',
+      confirmationDeadline: '2026-09-26T23:00:00.000Z',
     });
   });
 });

@@ -9,6 +9,10 @@ branding, business records or shared automation is involved.
 
 ## Default operation
 
+- One-time launch transition: the 2026-Q4 slot is September 28, 2026. Its
+  September 14 qualification cutoff makes September 7 the final scoring game of
+  the current season. The September 21 regular game starts the next season.
+  Beginning in 2027, the ordinary first-off-week quarterly rule applies.
 - Schedule the first Monday in each calendar quarter that is seven days offset
   from the regular 14-day cadence, at 18:30 America/Chicago. Materialize the next
   future occurrence; never catch up a past tournament or send overdue historical

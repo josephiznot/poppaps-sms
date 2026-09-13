@@ -24,6 +24,11 @@ const CHICAGO = 'America/Chicago';
 const SEATS = 8;
 const DAY_MS = 86_400_000;
 const uid = () => crypto.randomUUID();
+// One-time launch transition requested by the host: close the existing season
+// after the September 7 game, then resume the normal quarterly cadence in 2027.
+const TRANSITION_DATES: Readonly<Record<string, string>> = {
+  '2026-Q4': '2026-09-28',
+};
 
 export interface TournamentSummary {
   plan: TournamentPlanView | null;
@@ -63,6 +68,8 @@ const nextQuarter = (year: number, quarter: number): { year: number; quarter: nu
 /** First Monday in the quarter that falls on the recurring series' off week. */
 export function tournamentOccurrenceForQuarter(year: number, quarter: number, timeZone = CHICAGO): string {
   if (!Number.isInteger(year) || quarter < 1 || quarter > 4) throw new Error('Invalid calendar quarter');
+  const transitionDate = TRANSITION_DATES[quarterKey(year, quarter)];
+  if (transitionDate) return zonedToUtcIso(`${transitionDate}T${RECURRING.time}`, timeZone);
   const month = (quarter - 1) * 3 + 1;
   let dateKey = `${year}-${String(month).padStart(2, '0')}-01`;
   const anchorMs = new Date(`${RECURRING.anchorDate}T00:00:00Z`).getTime();
