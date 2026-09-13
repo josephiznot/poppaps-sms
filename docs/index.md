@@ -50,7 +50,8 @@ doesn't charge anything for the texts.
 
 Reply **`STOP`** to any message at any time and you'll be removed immediately.
 You'll get one final confirmation text and nothing after that. To rejoin later,
-just text `JOIN` again.
+text `START` or `UNSTOP`. If you already gave us your name, you won't need to
+provide it again.
 
 ## Need help?
 

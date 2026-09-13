@@ -61,6 +61,18 @@ export function alreadyMemberMessage(env: Env): string {
   return `${env.PROGRAM_NAME}: You're already on the list. Reply STOP to cancel, HELP for help.`;
 }
 
+export function welcomeBackMessage(env: Env, name: string): string {
+  const link = env.PUBLIC_BASE_URL ? ` Standings: ${env.PUBLIC_BASE_URL}/` : '';
+  return (
+    `${env.PROGRAM_NAME}: Welcome back, ${name}! You're subscribed again for game reminders ` +
+    `and occasional promos. We kept your name and standings history.${link} Reply STOP to cancel.`
+  );
+}
+
+export function rejoinMessage(env: Env): string {
+  return `${env.PROGRAM_NAME}: To rejoin game reminders, text START or UNSTOP. Reply HELP for info.`;
+}
+
 export function helpMessage(env: Env): string {
   return (
     `${env.PROGRAM_NAME}: reminders + promos for poker at Poppa P's. ` +
@@ -73,10 +85,11 @@ export function helpMessage(env: Env): string {
  * an already-subscribed member isn't told to JOIN (they're in); a non-member
  * or opted-out number is. STOP + HELP are offered to everyone (compliance).
  */
-export function unknownMessage(env: Env, subscribed = false): string {
+export function unknownMessage(env: Env, subscribed = false, optedOut = false): string {
   if (subscribed) {
     return `${env.PROGRAM_NAME}: You're already on the list for game reminders. Reply HELP for info or STOP to unsubscribe.`;
   }
+  if (optedOut) return rejoinMessage(env);
   return `${env.PROGRAM_NAME}: Reply JOIN for game reminders, HELP for info, or STOP to unsubscribe.`;
 }
 

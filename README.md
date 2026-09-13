@@ -126,6 +126,7 @@ Real SMS sending still needs valid Twilio creds in `.dev.vars`; everything else
 - **No routine tournament button.** The hourly job freezes eight qualifiers, closes the scoring season, queues invitations and fills clear-cut vacancies. STOP is authoritative; FOLD declines only the seat. Expired/replaced offers cannot reclaim a seat.
 - **Tournament page**: reschedule when a date conflicts, resolve a final-seat tie, inspect missing results or uncertain delivery. Date changes after invitations notify current invitees once. Cancelled quarterly events are not regenerated.
 - **Roster**: tidy names and mark earned promos redeemed. Public names are always minimized; profile IDs are random.
+- **Returning players**: after STOP, text START or UNSTOP. The saved player name, standings history and profile ID are retained, so onboarding is not repeated.
 
 ## Upgrading to automatic tournaments
 

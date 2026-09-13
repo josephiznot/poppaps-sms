@@ -58,7 +58,7 @@ export function termsPage(env: Env): Response {
     `<h2>Cost</h2>` +
     `<p>Message and data rates may apply, depending on your mobile plan. Poppa P's doesn't charge anything for the texts.</p>` +
     `<h2>Stop / Help</h2>` +
-    `<p>Reply <strong>STOP</strong> any time to be removed immediately (one final confirmation, then nothing). Reply JOIN to rejoin. Reply <strong>HELP</strong>, or ask the host at Poppa P's.</p>` +
+    `<p>Reply <strong>STOP</strong> any time to be removed immediately (one final confirmation, then nothing). To rejoin, reply <strong>START</strong> or <strong>UNSTOP</strong>; if you already gave us your name, you won't need to provide it again. Reply <strong>HELP</strong>, or ask the host at Poppa P's.</p>` +
     `<h2>About the game</h2>` +
     `<p>A private, social game at the cigar lounge. Players buy cigars up front — and are ID'd at purchase — and compete for cigars at the table. No money is wagered and there are no cash payouts.</p>` +
     footer('/privacy', 'Privacy Policy');

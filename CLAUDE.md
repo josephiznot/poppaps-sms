@@ -27,6 +27,9 @@ The public footer credit has been removed. Do not load unrelated business record
 Apply migrations 0005 then 0006 before deploying. Use Node 24+ for SQLite tests.
 Result edits preserve season attribution and use atomic, version-guarded replacement.
 Public profile IDs are stored random identifiers; always minimize public names.
+After STOP, START or UNSTOP restores consent without replacing a stored name or
+public profile ID. Ask for identity only when the member has no usable name;
+honor Twilio OptOutType and avoid duplicate provider lifecycle confirmations.
 One-time transition: schedule 2026-Q4 on September 28 so September 7 is the last
 scoring game of the current season; September 21 begins the next season. Resume
 the default quarterly occurrence rule in 2027.
