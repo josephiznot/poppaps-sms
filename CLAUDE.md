@@ -19,12 +19,14 @@ automatic quarterly off-week tournament scheduling, invitations, season closure,
 reminders and clear-cut replacements. Routine host work is entering game results;
 date conflicts, missing results, cutoff ties and uncertain texts are exceptions.
 Default tournament: first off-week Monday each quarter, 18:30 Central; qualification
-and invitations fourteen calendar days before at 10:00; confirm deadline two days
-before at 18:00. Atomic persistent intent precedes provider sends; no blind retry
+and invitations fourteen calendar days before at 10:00; initial invitees have
+seven calendar days to reply, until seven days before play at 10:00. Atomic
+persistent intent precedes provider sends; no blind retry
 of uncertain sends. Expired/replaced offers cannot reclaim seats. The system stays
 on Cloudflare/D1/Twilio and is completely separate from Skooped or other projects.
 The public footer credit has been removed. Do not load unrelated business records.
-Apply migrations 0005 then 0006 before deploying. Use Node 24+ for SQLite tests.
+Apply migrations 0005, 0006, then 0007 before deploying. Use Node 24+ for
+SQLite tests.
 Result edits preserve season attribution and use atomic, version-guarded replacement.
 Public profile IDs are stored random identifiers; always minimize public names.
 After STOP, START or UNSTOP restores consent without replacing a stored name or
@@ -82,8 +84,8 @@ which standings `SUM` naturally (ADR-0002).
 
 The hourly Worker schedules the first off-week Monday each quarter at 18:30
 Central. Invitations and qualification close happen fourteen days before at 10:00;
-replies are due two days before at 18:00. The host records results and changes dates
-only for conflicts. Missing results, insufficient standings, cutoff ties and
+initial replies are due seven days before at 10:00. The host records results and
+changes dates only for conflicts. Missing results, insufficient standings, cutoff ties and
 uncertain delivery appear as exceptions in the admin Tournament page.
 
 The full board, qualifiers, season boundary, seat offers and unique outbound work

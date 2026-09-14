@@ -4,8 +4,9 @@
 > supersedes the manual tournament scheduling, manual send/reset, host-paced
 > backfill and unrestricted RSVP-reclaim wording below. Tournaments auto-schedule
 > on the first off-week Monday each quarter. Qualification closes and invitation
-> work is persisted fourteen days before play, with the response deadline two days
-> before play. The host records results and handles only date conflicts, missing
+> work is persisted fourteen days before play, with the initial response deadline
+> seven days before play at 10:00 Central. The host records results and handles
+> only date conflicts, missing
 > results, cutoff ties and uncertain delivery. Clear vacancies are filled in frozen
 > board order automatically; replaced/expired invitations cannot reclaim seats.
 > A season close, full qualifying board, seat offers and unique outbound intent
@@ -114,14 +115,14 @@ regress.
 
 ### 2.4 Special Players tournament (ADR-0009)
 - FR-T1. Automatic quarterly scheduling: first Monday on the regular cadence's off week at 18:30 America/Chicago. The one-time 2026-Q4 transition is September 28, with September 7 as the last scoring game; the normal rule resumes in 2027. Only the next future occurrence is materialized. Host overrides and cancellations persist.
-- FR-T2. At 10:00 Central fourteen calendar days before play, validate qualification and atomically persist the season boundary, complete ranked board, selected eight qualifiers, seat offers and unique outbound intent. Only then dispatch invitations. No routine host approval is required.
+- FR-T2. At 10:00 Central fourteen calendar days before play, validate qualification and atomically persist the season boundary, complete ranked board, selected eight qualifiers, seat offers and unique outbound intent. Only then dispatch invitations. Initial invitees have exactly seven calendar days to respond, until 10:00 Central seven days before play. No routine host approval is required.
 - FR-T3. Season reset is a recorded boundary, never deletion. Complete frozen standings preserve replacement order after later result corrections. Edits cannot move a game to a new season.
 - FR-T4. Missing regular-game results, fewer than eight scoring players, and equal-point ties across the eighth seat block automatic invitations. The host selects only from the unresolved tied group; higher scoring players retain their places.
 - FR-T5. Tournament placements are recorded with zero points. Zero-point rows cannot affect scoring tie-breaks. Tied first-place finishers are co-winners in public summaries.
 - FR-T6. Invitations stay framed as game-night reminders for an invitation-only cigar-prize event; no cash or money wagering. The stored date and response deadline appear in the text.
 - FR-T7. Opted-out qualifiers retain their historical earned place and receive no SMS. Every dispatch rechecks subscription. Eligible replacements follow the frozen board; unresolved replacement ties require host choice.
 - FR-T8. CALL confirms an active offer; FOLD declines while preserving reminder subscription. STOP and HELP remain authoritative. Pending offers expire at their stored deadline. Replaced, expired, cancelled and completed-event offers cannot reclaim seats or promise attendance.
-- FR-T9. Clear vacancies are filled automatically until twenty-four hours before play. Replacement offers have bounded deadlines. At most eight active/confirmed offers may reserve seats. Current offers receive reminders; declined, replaced and opted-out players do not.
+- FR-T9. Clear vacancies are filled automatically until twenty-four hours before play. Replacement offers expire twenty-four hours after they are made, capped at twenty-four hours before play. At most eight active/confirmed offers may reserve seats. Current offers receive reminders; declined, replaced and opted-out players do not.
 - FR-T10. Per-recipient durable delivery state distinguishes queued, accepted, delivered, failed and unknown. Uncertain transport is never automatically resent. Repeated cron ticks, form submissions and callbacks do not duplicate logical work.
 - FR-T11. Rescheduling preserves the plan/game and any closed season, rejects conflicts, updates deadlines and sends one versioned notice to current invitees. Cancellation retires offers, suppresses stale work and does not regenerate that quarter.
 

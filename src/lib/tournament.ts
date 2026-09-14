@@ -90,7 +90,7 @@ export function tournamentDeadlines(startsAt: string, timeZone = CHICAGO): {
   const dateKey = localDateInTz(new Date(startsAt), timeZone);
   return {
     qualificationCutoff: zonedToUtcIso(`${addDaysToKey(dateKey, -14)}T10:00`, timeZone),
-    confirmationDeadline: zonedToUtcIso(`${addDaysToKey(dateKey, -2)}T18:00`, timeZone),
+    confirmationDeadline: zonedToUtcIso(`${addDaysToKey(dateKey, -7)}T10:00`, timeZone),
   };
 }
 
@@ -442,9 +442,7 @@ async function freezeQualification(env: Env, plan: TournamentPlanRow, now: Date)
 
 const replacementDeadline = (plan: TournamentPlanRow, now: Date): string => {
   const startMs = new Date(plan.planned_starts_at).getTime();
-  const normal = new Date(plan.confirmation_deadline).getTime();
-  const proposed = now.getTime() < normal ? normal : now.getTime() + DAY_MS;
-  return new Date(Math.min(proposed, startMs - DAY_MS)).toISOString();
+  return new Date(Math.min(now.getTime() + DAY_MS, startMs - DAY_MS)).toISOString();
 };
 
 async function refreshAndFillSeats(env: Env, plan: TournamentPlanRow, now: Date): Promise<number> {
@@ -820,10 +818,9 @@ export async function rescheduleTournament(
   if (!plan.season_id && deadlines.qualificationCutoff <= now.toISOString()) {
     throw new Error('A tournament that has not qualified needs at least fourteen days notice.');
   }
-  if (plan.season_id && (
-    new Date(startsAt).getTime() - now.getTime() < 2 * DAY_MS ||
-    deadlines.confirmationDeadline <= now.toISOString()
-  )) throw new Error('An active tournament must be rescheduled with at least two days for current invitees to respond.');
+  if (plan.season_id && deadlines.confirmationDeadline <= now.toISOString()) {
+    throw new Error('An active tournament must be rescheduled with at least seven days for current invitees to respond.');
+  }
   const nowIso = now.toISOString();
   const token = uid();
   const nextVersion = expected + 1;

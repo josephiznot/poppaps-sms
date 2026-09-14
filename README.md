@@ -96,6 +96,10 @@ Text **JOIN** to your number from your phone to test the whole loop.
 > npm run db:migrate:remote        # 0001 — recurring games
 > npm run db:migrate:0002:remote   # 0002 — tournament RSVPs
 > npm run db:migrate:0003:remote   # 0003 — finishing place on result rows
+> npm run db:migrate:0004:remote   # 0004 — declined tournament RSVPs
+> npm run db:migrate:0005:remote   # 0005 — stable result timestamps and public IDs
+> npm run db:migrate:0006:remote   # 0006 — automatic tournaments and SMS outbox
+> npm run db:migrate:0007:remote   # 0007 — seven-day initial tournament RSVP deadline
 > npm run deploy
 > ```
 
@@ -121,7 +125,7 @@ Real SMS sending still needs valid Twilio creds in `.dev.vars`; everything else
 ## Day-to-day
 
 - **Record results** after each game. Choose finishers and attendance. Results save atomically; editing an old game preserves its season. Tournament results award zero season points.
-- **Tournament dates appear automatically**: first off-week Monday each quarter, 6:30 PM Central. Invitations and qualification close are fourteen days before play at 10:00 AM Central. Replies are due two days before play at 6:00 PM.
+- **Tournament dates appear automatically**: first off-week Monday each quarter, 6:30 PM Central. Invitations and qualification close are fourteen days before play at 10:00 AM Central. Initial replies are due seven days before play at 10:00 AM; replacements get 24 hours, capped at 24 hours before play.
 - **2026 transition**: the next tournament is September 28. Qualification closes September 14, making September 7 the final scoring game of the current season; September 21 begins the next season. Normal quarterly scheduling resumes in 2027.
 - **No routine tournament button.** The hourly job freezes eight qualifiers, closes the scoring season, queues invitations and fills clear-cut vacancies. STOP is authoritative; FOLD declines only the seat. Expired/replaced offers cannot reclaim a seat.
 - **Tournament page**: reschedule when a date conflicts, resolve a final-seat tie, inspect missing results or uncertain delivery. Date changes after invitations notify current invitees once. Cancelled quarterly events are not regenerated.
@@ -130,10 +134,10 @@ Real SMS sending still needs valid Twilio creds in `.dev.vars`; everything else
 
 ## Upgrading to automatic tournaments
 
-Read [ADR-0009](docs/adr/0009-automatic-tournaments.md). Apply migrations **0005 then 0006** before deploying this revision. Do not run the fresh schema against a legacy database as a substitute for migrations.
+Read [ADR-0009](docs/adr/0009-automatic-tournaments.md). Apply migrations **0005, 0006, then 0007** before deploying this revision. Do not run the fresh schema against a legacy database as a substitute for migrations.
 
 1. Back up D1 and confirm no duplicate member/game ledger rows or duplicate season-close timestamps. Resolve anomalies explicitly; migrations never delete history to make a constraint pass.
-2. Apply migrations 0005 and 0006 using the matching npm scripts. 0005 preserves existing effective scoring times and creates random public profile IDs; old hashed profile bookmarks no longer resolve.
+2. Apply migrations 0005, 0006, and 0007 using the matching npm scripts. 0005 preserves existing effective scoring times and creates random public profile IDs; old hashed profile bookmarks no longer resolve. 0007 corrects the already-created 2026-Q4 plan's initial RSVP deadline.
 3. Deploy the checked revision. Existing completed seasons remain historical; past tournaments are never re-invited. Initial automatic planning skips past or less-than-fourteen-day-away quarterly dates.
 4. Verify health and public/admin reads. Let the real cron run; **never send production texts as a smoke test**. Provider acceptance and delivered receipts are displayed separately.
 
