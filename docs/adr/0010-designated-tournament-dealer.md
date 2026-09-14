@@ -17,10 +17,15 @@ a separate operation after migration 0008; no identity or phone is stored here.
 
 Every normal tournament tick ensures each subscribed designated dealer has one
 schedule-versioned notice for the current ACTIVE plan until the future tournament
-starts. It includes date, location, no-RSVP guidance, the fact that the role consumes
-no player seat, and the stored player response deadline using wording appropriate to
-whether that deadline is upcoming or past. Dealer attendance never creates a
-`tournament_offers` row.
+starts. To validate the player-facing copy, its body is byte-for-byte the same
+`automaticTournamentInvite` body sent to an initially qualified player, including
+CALL/FOLD wording. The delivery remains a `DEALER_TOURNAMENT_NOTICE`: it has no
+offer, consumes no seat, and CALL/FOLD cannot act on it. Dealer attendance never
+creates a `tournament_offers` row.
+
+Changing that shared copy does not create or replace current-version dealer work.
+The existing logical key and schedule version remain authoritative, so a previously
+created or delivered 2026-Q4 notice is not resent by a later tick.
 
 An ACTIVE or CONFIRMED player offer takes precedence: normal player invitation and
 reminder behavior applies and queued dealer work is suppressed. Otherwise the dealer
@@ -38,4 +43,4 @@ are never recovered.
 
 Dealer attendance is independent of the eight-seat offer invariant and CALL/FOLD.
 Hourly ticks cover role assignment after a plan is ACTIVE, while unique logical keys
-make repeated ticks idempotent.
+make repeated ticks and copy-only code changes idempotent.

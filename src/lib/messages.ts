@@ -159,15 +159,6 @@ const dealerPlayerDeadlineText = (env: Env, playerDeadline: string, now: Date): 
     ? `Player invitations are open through ${formatWhen(playerDeadline, env.TIMEZONE)}.`
     : `The player response deadline was ${formatWhen(playerDeadline, env.TIMEZONE)}.`;
 
-export function designatedDealerTournamentNotice(env: Env, game: Game, playerDeadline: string, now = new Date()): string {
-  return (
-    `${env.PROGRAM_NAME}: You're the designated dealer for the Special Players tournament ` +
-    `${formatWhen(game.starts_at, env.TIMEZONE)} at ${game.location}. No RSVP is needed for the dealer role, ` +
-    `and it does not take a player seat. ${dealerPlayerDeadlineText(env, playerDeadline, now)} ` +
-    `Reply STOP to opt out.`
-  );
-}
-
 export function designatedDealerTournamentReminder(env: Env, game: Game): string {
   return (
     `${env.PROGRAM_NAME}: 🏆 Reminder — you're the designated dealer for the Special Players tournament ` +
