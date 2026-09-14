@@ -59,6 +59,14 @@ mean delivered. Persist and verify signed Twilio status callbacks when available
 Do not retry ambiguous network/provider outcomes automatically; show an exception
 and provide explicit reconciliation/retry controls. Recheck subscription and event
 validity immediately before sending. Pace SMS conservatively at one request/sec.
+When a signed Twilio webhook reports provider-standard START or UNSTOP, with or
+without OptOutType, it may requeue the same sender's definite no-SID error-21610
+tournament invitation after local member reactivation, but only while the offer
+and plan are active, the offer response and delivery deadlines remain open, and
+the linked game is future and uncancelled. Preserve attempt history and let the
+ordinary hourly outbox perform the send; the inbound webhook never drains the
+outbox. Bare JOIN, YES, and uncertain or provider-accepted delivery states provide
+no authority to recover a message.
 
 Reminder intents are per current offer/recipient, exclude declined/replaced/opted-out
 players, and remain recoverable independently. An event with no invites must not

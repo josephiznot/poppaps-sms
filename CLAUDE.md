@@ -32,6 +32,10 @@ Public profile IDs are stored random identifiers; always minimize public names.
 After STOP, START or UNSTOP restores consent without replacing a stored name or
 public profile ID. Ask for identity only when the member has no usable name;
 honor Twilio OptOutType and avoid duplicate provider lifecycle confirmations.
+A signed provider-standard START or UNSTOP (including an authoritative
+OptOutType START) also safely requeues that sender's still-current tournament
+invite when its only failed send was Twilio opt-out error 21610; the hourly
+outbox performs the later send after revalidating the active offer and game.
 One-time transition: schedule 2026-Q4 on September 28 so September 7 is the last
 scoring game of the current season; September 21 begins the next season. Resume
 the default quarterly occurrence rule in 2027.
@@ -96,6 +100,10 @@ releases it without unsubscribing. Expired or replaced invitations cannot reclai
 seats. Reminder recipients are current offers only. STOP/HELP remain load-bearing.
 Per-recipient SID and status distinguish provider acceptance from delivery.
 Unknown transport outcomes never automatically retry.
+A signed provider-standard Twilio START or UNSTOP may recover only a definite
+no-SID 21610 failure for the sender's active, unexpired tournament invitation;
+it queues the existing logical delivery for the hourly outbox and never sends
+from the webhook.
 
 ## Interaction surfaces (ADR-0005)
 
