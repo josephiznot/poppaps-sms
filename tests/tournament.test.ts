@@ -46,7 +46,7 @@ describe('quarterly tournament dates', () => {
     expect(tournamentOccurrenceForQuarter(2027, 1)).toBe('2027-01-05T00:30:00.000Z');
     expect(tournamentDeadlines('2026-09-28T23:30:00.000Z')).toEqual({
       qualificationCutoff: '2026-09-14T15:00:00.000Z',
-      confirmationDeadline: '2026-09-26T23:00:00.000Z',
+      confirmationDeadline: '2026-09-21T15:00:00.000Z',
     });
   });
 });
@@ -107,6 +107,7 @@ describe('automatic tournament lifecycle', () => {
     expect(summary.offers).toHaveLength(9);
     expect(summary.offers.find((o) => o.member_phone === phones[0])?.state).toBe('REPLACED');
     expect(summary.offers.filter((o) => ['ACTIVE', 'CONFIRMED'].includes(o.state))).toHaveLength(8);
+    expect(summary.offers.find((o) => o.member_phone === phones[8])?.response_deadline).toBe('2026-04-01T12:00:00.000Z');
     expect((await respondToTournamentOffer(env, phones[0]!, 'CONFIRM', new Date('2026-03-31T12:01:00.000Z'))).outcome).not.toBe('CONFIRMED');
   });
 

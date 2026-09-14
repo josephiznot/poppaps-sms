@@ -21,8 +21,9 @@ branding, business records or shared automation is involved.
   quarter rather than silently inventing a late-quarter championship.
 - Invitations / qualification close: 10:00 Central fourteen calendar days before
   the tournament. Results from regular games after this cutoff belong to the new
-  season, even if played before the tournament. Confirm by 18:00 Central two days
-  before the tournament. Deadlines and dates are stored as UTC instants and shown
+  season, even if played before the tournament. Initial invitees have exactly seven
+  calendar days to respond, until 10:00 Central seven days before the tournament.
+  Deadlines and dates are stored as UTC instants and shown
   in Central time. Quarterly date generation uses the recurrence rule even beyond
   the currently materialized regular-game horizon.
 - Routine host work is recording game results. The scheduler creates games,
@@ -41,7 +42,7 @@ branding, business records or shared automation is involved.
   an unresolved equal-score group.
 - Declines and opted-out seats may be replaced automatically in clear board order.
   Pending invitations expire at the stored deadline. Replacement invitations get
-  a bounded response window, never extending past tournament start; do not dispatch
+  twenty-four hours to respond, capped at twenty-four hours before play; do not dispatch
   new invites inside 24 hours of play. Original offers are retired atomically when
   replaced; a later CALL cannot reclaim a reassigned seat. STOP always wins, FOLD
   keeps the player subscribed. Past/cancelled games never accept RSVPs.
