@@ -28,7 +28,9 @@
     "db:migrate:0006:local": "wrangler d1 execute poker-sms --local --file=./migrations/0006_automatic_tournaments.sql",
     "db:migrate:0006:remote": "wrangler d1 execute poker-sms --remote --file=./migrations/0006_automatic_tournaments.sql",
     "db:migrate:0007:local": "wrangler d1 execute poker-sms --local --file=./migrations/0007_seven_day_rsvp_deadline.sql",
-    "db:migrate:0007:remote": "wrangler d1 execute poker-sms --remote --file=./migrations/0007_seven_day_rsvp_deadline.sql"
+    "db:migrate:0007:remote": "wrangler d1 execute poker-sms --remote --file=./migrations/0007_seven_day_rsvp_deadline.sql",
+    "db:migrate:0008:local": "wrangler d1 execute poker-sms --local --file=./migrations/0008_designated_dealer.sql",
+    "db:migrate:0008:remote": "wrangler d1 execute poker-sms --remote --file=./migrations/0008_designated_dealer.sql"
   },
   "dependencies": {
     "hono": "^4.13.7"

@@ -13,9 +13,12 @@ import {
   type TournamentPlanRow,
   type TournamentPlanView,
 } from './tournament-db';
-import { listDeliveries, type DeliveryRow } from './delivery';
+import { listDeliveries, queueDelivery, type DeliveryRow } from './delivery';
 import {
   automaticTournamentInvite,
+  designatedDealerDateChangedMessage,
+  designatedDealerTournamentCancelledMessage,
+  designatedDealerTournamentNotice,
   tournamentCancelledMessage,
   tournamentDateChangedMessage,
 } from './messages';
@@ -51,6 +54,7 @@ export interface TournamentTickResult {
   closed: number;
   offersQueued: number;
   completed: number;
+  dealerNoticesQueued: number;
 }
 
 export const quarterKey = (year: number, quarter: number): string => `${year}-Q${quarter}`;
@@ -609,8 +613,57 @@ async function refreshAndFillSeats(env: Env, plan: TournamentPlanRow, now: Date)
   }
 }
 
+async function ensureDesignatedDealerNotices(env: Env, plan: TournamentPlanRow, now: Date): Promise<number> {
+  const nowIso = now.toISOString();
+  if (plan.planned_starts_at <= nowIso) return 0;
+  const game = await coreDb.getGame(env.DB, plan.game_id);
+  if (!game || game.cancelled) return 0;
+  const dealers = await env.DB
+    .prepare("SELECT phone FROM members WHERE is_designated_dealer=1 AND status='SUBSCRIBED' ORDER BY phone")
+    .all<{ phone: string }>();
+  let queued = 0;
+  for (const dealer of dealers.results ?? []) {
+    const offer = await env.DB
+      .prepare("SELECT id FROM tournament_offers WHERE plan_id=? AND member_phone=? AND state IN ('ACTIVE','CONFIRMED')")
+      .bind(plan.id, dealer.phone)
+      .first<{ id: string }>();
+    if (offer) {
+      await env.DB
+        .prepare(
+          `UPDATE sms_deliveries SET state='SUPPRESSED', retryable=0,
+           last_error='Dealer has a current player offer', updated_at=?
+           WHERE plan_id=? AND recipient=? AND kind LIKE 'DEALER_%'
+             AND state IN ('QUEUED','FAILED')`,
+        )
+        .bind(nowIso, plan.id, dealer.phone)
+        .run();
+      continue;
+    }
+    const logicalKey = `tournament:${plan.id}:dealer-notice:v${plan.schedule_version}`;
+    const existing = await env.DB
+      .prepare('SELECT id FROM sms_deliveries WHERE logical_key=? AND recipient=?')
+      .bind(logicalKey, dealer.phone)
+      .first<{ id: string }>();
+    await queueDelivery(env.DB, {
+      logicalKey,
+      recipient: dealer.phone,
+      kind: 'DEALER_TOURNAMENT_NOTICE',
+      body: designatedDealerTournamentNotice(env, game, plan.confirmation_deadline, now),
+      now: nowIso,
+      planId: plan.id,
+      gameId: plan.game_id,
+      version: plan.schedule_version,
+      expiresAt: plan.planned_starts_at,
+    });
+    if (!existing) queued++;
+  }
+  return queued;
+}
+
 export async function tickTournaments(env: Env, now = new Date()): Promise<TournamentTickResult> {
-  const result: TournamentTickResult = { created: await createNextPlan(env, now), closed: 0, offersQueued: 0, completed: 0 };
+  const result: TournamentTickResult = {
+    created: await createNextPlan(env, now), closed: 0, offersQueued: 0, completed: 0, dealerNoticesQueued: 0,
+  };
   const plans = await listTournamentPlanRows(env.DB);
   for (const plan of plans) {
     if (plan.status === 'CANCELLED' || plan.status === 'COMPLETED') continue;
@@ -620,7 +673,13 @@ export async function tickTournaments(env: Env, now = new Date()): Promise<Tourn
     }
     const current = await getTournamentPlan(env.DB, plan.id);
     if (!current) continue;
-    if (current.status === 'ACTIVE') result.offersQueued += await refreshAndFillSeats(env, current, now);
+    if (current.status === 'ACTIVE') {
+      result.offersQueued += await refreshAndFillSeats(env, current, now);
+      const refreshed = await getTournamentPlan(env.DB, current.id);
+      if (refreshed?.status === 'ACTIVE') {
+        result.dealerNoticesQueued += await ensureDesignatedDealerNotices(env, refreshed, now);
+      }
+    }
     if (current.status === 'ACTIVE' && current.planned_starts_at <= now.toISOString()) {
       const recorded = await env.DB
         .prepare('SELECT results_recorded_at FROM games WHERE id=?')
@@ -830,6 +889,12 @@ export async function rescheduleTournament(
   const priorDeliveries = plan.season_id ? await listDeliveries(env.DB, plan.id) : [];
   const recipients = [...new Set(offers.filter((o) => o.state === 'ACTIVE' || o.state === 'CONFIRMED').map((o) => o.member_phone))];
   const subscribed = new Set(await coreDb.listSubscribedPhones(env.DB));
+  const dealers = plan.season_id
+    ? (await env.DB
+      .prepare("SELECT phone FROM members WHERE is_designated_dealer=1 AND status='SUBSCRIBED' ORDER BY phone")
+      .all<{ phone: string }>()).results ?? []
+    : [];
+  const currentPlayerPhones = new Set(recipients);
   const offerSignature = offers.map((o) => `${o.id}:${o.state}:${o.replaced_by_offer_id ?? ''}`).sort().join('|');
   const qualificationCutoff = plan.season_id ? plan.qualification_cutoff : deadlines.qualificationCutoff;
   const statements: D1PreparedStatement[] = [
@@ -899,6 +964,29 @@ export async function rescheduleTournament(
           ),
       );
     }
+    for (const dealer of dealers.filter((d) => !currentPlayerPhones.has(d.phone))) {
+      const notified = priorDeliveries.some(
+        (d) => d.recipient === dealer.phone
+          && ['DEALER_TOURNAMENT_NOTICE', 'DEALER_TOURNAMENT_DATE_CHANGE'].includes(d.kind)
+          && ['SENDING', 'ACCEPTED', 'DELIVERED', 'UNKNOWN'].includes(d.state),
+      );
+      const kind = notified ? 'DEALER_TOURNAMENT_DATE_CHANGE' : 'DEALER_TOURNAMENT_NOTICE';
+      const keyPart = notified ? 'dealer-date-change' : 'dealer-notice';
+      const body = notified
+        ? designatedDealerDateChangedMessage(env, updatedGame, activeDeadline, now)
+        : designatedDealerTournamentNotice(env, updatedGame, activeDeadline, now);
+      statements.push(
+        env.DB.prepare(
+          `INSERT OR IGNORE INTO sms_deliveries
+           (id, logical_key, plan_id, game_id, recipient, kind, body, version, state, expires_at, created_at, updated_at)
+           SELECT ?, ?, ?, ?, ?, ?, ?, ?, 'QUEUED', ?, ?, ?
+           WHERE EXISTS (SELECT 1 FROM tournament_plans WHERE id=? AND mutation_token=?)`,
+        ).bind(
+          uid(), `tournament:${plan.id}:${keyPart}:v${nextScheduleVersion}`, plan.id, plan.game_id,
+          dealer.phone, kind, body, nextScheduleVersion, startsAt, nowIso, nowIso, plan.id, token,
+        ),
+      );
+    }
   }
   await env.DB.batch(statements);
   const updated = await getTournamentPlan(env.DB, plan.id);
@@ -932,6 +1020,13 @@ export async function cancelTournament(
       .map((o) => o.member_phone),
   )];
   const subscribed = new Set(await coreDb.listSubscribedPhones(env.DB));
+  const playerRecipientSet = new Set(recipients);
+  const dealerRecipients = [...new Set(
+    priorDeliveries
+      .filter((d) => ['DEALER_TOURNAMENT_NOTICE', 'DEALER_TOURNAMENT_DATE_CHANGE'].includes(d.kind))
+      .filter((d) => ['SENDING', 'ACCEPTED', 'DELIVERED', 'UNKNOWN'].includes(d.state))
+      .map((d) => d.recipient),
+  )].filter((phone) => !playerRecipientSet.has(phone));
   const offerSignature = offers.map((o) => `${o.id}:${o.state}:${o.replaced_by_offer_id ?? ''}`).sort().join('|');
   const statements: D1PreparedStatement[] = [
     env.DB
@@ -978,6 +1073,19 @@ export async function cancelTournament(
           uid(), `tournament:${plan.id}:cancelled`, plan.id, plan.game_id, offer.id, phone,
           tournamentCancelledMessage(env), nextScheduleVersion, nowIso, nowIso, plan.id, token,
         ),
+    );
+  }
+  for (const phone of dealerRecipients.filter((p) => subscribed.has(p))) {
+    statements.push(
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO sms_deliveries
+         (id, logical_key, plan_id, game_id, recipient, kind, body, version, state, created_at, updated_at)
+         SELECT ?, ?, ?, ?, ?, 'DEALER_TOURNAMENT_CANCELLED', ?, ?, 'QUEUED', ?, ?
+         WHERE EXISTS (SELECT 1 FROM tournament_plans WHERE id=? AND mutation_token=?)`,
+      ).bind(
+        uid(), `tournament:${plan.id}:dealer-cancelled`, plan.id, plan.game_id, phone,
+        designatedDealerTournamentCancelledMessage(env), nextScheduleVersion, nowIso, nowIso, plan.id, token,
+      ),
     );
   }
   await env.DB.batch(statements);

@@ -11,9 +11,11 @@ CREATE TABLE IF NOT EXISTS members (
   opted_out_at  TEXT,
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL,
-  public_id     TEXT DEFAULT (lower(hex(randomblob(16))))
+  public_id     TEXT DEFAULT (lower(hex(randomblob(16)))),
+  is_designated_dealer INTEGER NOT NULL DEFAULT 0 CHECK (is_designated_dealer IN (0,1))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_members_public_id ON members(public_id);
+CREATE INDEX IF NOT EXISTS idx_members_designated_dealer ON members(is_designated_dealer, status);
 
 CREATE TABLE IF NOT EXISTS games (
   id            TEXT PRIMARY KEY,

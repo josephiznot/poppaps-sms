@@ -13,6 +13,8 @@
 > commit atomically before provider dispatch. Delivery acceptance and receipt are
 > tracked separately. Public scoring, season timing, qualification and player-action
 > guidance must match this policy. This project has no connection to other businesses.
+> A subscribed designated dealer receives separate tournament notice and reminder
+> copy without consuming a ranked seat or replying CALL/FOLD (ADR-0010).
 
 - **Status:** Consolidated draft for build (supersedes the 2026-06-08 hashing draft)
 - **Date:** 2026-06-08
@@ -127,8 +129,17 @@ regress.
 - FR-T7. Opted-out qualifiers retain their historical earned place and receive no SMS. Every dispatch rechecks subscription. Eligible replacements follow the frozen board; unresolved replacement ties require host choice.
 - FR-T8. CALL confirms an active offer; FOLD declines while preserving reminder subscription. STOP and HELP remain authoritative. Pending offers expire at their stored deadline. Replaced, expired, cancelled and completed-event offers cannot reclaim seats or promise attendance.
 - FR-T9. Clear vacancies are filled automatically until twenty-four hours before play. Replacement offers expire twenty-four hours after they are made, capped at twenty-four hours before play. At most eight active/confirmed offers may reserve seats. Current offers receive reminders; declined, replaced and opted-out players do not.
-- FR-T10. Per-recipient durable delivery state distinguishes queued, accepted, delivered, failed and unknown. Uncertain transport is never automatically resent. Repeated cron ticks, form submissions and callbacks do not duplicate logical work. A signed provider-standard START or UNSTOP, with or without OptOutType, may return the sender's definite no-SID 21610 tournament-invite failure to the hourly outbox only while its linked offer and plan remain active, its response deadline and delivery remain unexpired, and its linked game remains future and uncancelled. Other opt-in words, delivery kinds and states are never recovered by this path.
+- FR-T10. Per-recipient durable delivery state distinguishes queued, accepted, delivered, failed and unknown. Uncertain transport is never automatically resent. Repeated cron ticks, form submissions and callbacks do not duplicate logical work. A signed provider-standard START or UNSTOP, with or without OptOutType, may return the sender's definite no-SID 21610 tournament-invite failure to the hourly outbox only while its linked offer and plan remain active, its response deadline and delivery remain unexpired, and its linked game remains future and uncancelled. ADR-0010 extends this only to a still-current designated-dealer notice whose player invitation window remains open. Other opt-in words, delivery kinds and states are never recovered by this path.
 - FR-T11. Rescheduling preserves the plan/game and any closed season, rejects conflicts, updates deadlines and sends one versioned notice to current invitees. Cancellation retires offers, suppresses stale work and does not regenerate that quarter.
+- FR-T12. A reusable member role marks designated tournament dealers. Each subscribed
+  dealer receives one schedule-versioned ACTIVE-tournament notice with date, location,
+  no-RSVP guidance and the stored player response deadline, plus a dealer-specific
+  night-before reminder. Dealer attendance creates no offer and consumes no ranked
+  seat. An ACTIVE or CONFIRMED player offer takes precedence over dealer messaging.
+  Reschedules and cancellations notify a previously notified dealer once; STOP wins.
+  The dealer notice and its narrow definite no-SID 21610 START/UNSTOP recovery remain
+  valid until the ACTIVE, uncancelled tournament starts, independent of the player
+  response deadline.
 
 ### 2.5 Attendance & rewards
 - FR-W1. **Attendance is host-marked** on the post-game screen (tap who attended),
@@ -227,7 +238,7 @@ regress.
 ## 4. Data model (D1) — see ADR-0002/0004
 
 - **Members** — `phone` (PK), `displayName`, `status`, opt-in/out timestamps,
-  `source`, `createdAt`.
+  `source`, `createdAt`, and reusable `isDesignatedDealer` role flag.
 - **Games** — `id`, `startsAt`, `location`, `isTournament`, `reminderSent`,
   `createdAt` (+ optional `buyIn`/`description`).
 - **PointsLedger** — append-only: `memberPhone`, `gameId`, `points`, `place`
