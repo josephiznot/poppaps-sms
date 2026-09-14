@@ -13,8 +13,9 @@
 > commit atomically before provider dispatch. Delivery acceptance and receipt are
 > tracked separately. Public scoring, season timing, qualification and player-action
 > guidance must match this policy. This project has no connection to other businesses.
-> A subscribed designated dealer receives separate tournament notice and reminder
-> copy without consuming a ranked seat or replying CALL/FOLD (ADR-0010).
+> A subscribed designated dealer receives the exact initial qualified-player invite
+> body for copy validation, followed by dealer-specific lifecycle messages, without
+> consuming a ranked seat or gaining a CALL/FOLD-actionable offer (ADR-0010).
 
 - **Status:** Consolidated draft for build (supersedes the 2026-06-08 hashing draft)
 - **Date:** 2026-06-08
@@ -132,10 +133,12 @@ regress.
 - FR-T10. Per-recipient durable delivery state distinguishes queued, accepted, delivered, failed and unknown. Uncertain transport is never automatically resent. Repeated cron ticks, form submissions and callbacks do not duplicate logical work. A signed provider-standard START or UNSTOP, with or without OptOutType, may return the sender's definite no-SID 21610 tournament-invite failure to the hourly outbox only while its linked offer and plan remain active, its response deadline and delivery remain unexpired, and its linked game remains future and uncancelled. ADR-0010 extends this only to a still-current designated-dealer notice whose player invitation window remains open. Other opt-in words, delivery kinds and states are never recovered by this path.
 - FR-T11. Rescheduling preserves the plan/game and any closed season, rejects conflicts, updates deadlines and sends one versioned notice to current invitees. Cancellation retires offers, suppresses stale work and does not regenerate that quarter.
 - FR-T12. A reusable member role marks designated tournament dealers. Each subscribed
-  dealer receives one schedule-versioned ACTIVE-tournament notice with date, location,
-  no-RSVP guidance and the stored player response deadline, plus a dealer-specific
-  night-before reminder. Dealer attendance creates no offer and consumes no ranked
-  seat. An ACTIVE or CONFIRMED player offer takes precedence over dealer messaging.
+  dealer receives one schedule-versioned ACTIVE-tournament notice whose body is
+  byte-for-byte `automaticTournamentInvite` for an initially qualified player, plus
+  a dealer-specific night-before reminder. The notice keeps its dealer delivery kind,
+  creates no offer, consumes no ranked seat, and gives CALL/FOLD no effect. Copy-only
+  code changes retain the logical key and schedule version and cannot resend an
+  existing notice. An ACTIVE or CONFIRMED player offer takes precedence over dealer messaging.
   Reschedules and cancellations notify a previously notified dealer once; STOP wins.
   The dealer notice and its narrow definite no-SID 21610 START/UNSTOP recovery remain
   valid until the ACTIVE, uncancelled tournament starts, independent of the player

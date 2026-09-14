@@ -105,9 +105,12 @@ no-SID 21610 failure for the sender's active, unexpired tournament invitation or
 still-current designated-dealer notice;
 it queues the existing logical delivery for the hourly outbox and never sends
 from the webhook.
-A subscribed designated dealer receives separate tournament notice and night-before
-reminder copy without a seat offer or CALL/FOLD. A current player offer takes
-precedence. Hourly ticks cover plans already ACTIVE; reschedules, cancellations,
+A subscribed designated dealer receives the exact initial qualified-player invite
+body to validate player-facing copy, then dealer-specific night-before and lifecycle
+copy. The dealer delivery keeps no seat offer, consumes no seat, and CALL/FOLD has no
+effect. Copy changes preserve the existing logical key and schedule version, so they
+do not resend current-version notices. A current player offer takes precedence.
+Hourly ticks cover plans already ACTIVE; reschedules, cancellations,
 STOP and narrow no-SID 21610 recovery follow ADR-0010. Dealer notice eligibility
 continues until tournament start and does not end at the player response deadline.
 

@@ -4,8 +4,10 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Hono } from 'hono';
 import type { Env } from '../src/types';
+import { getGame } from '../src/lib/db';
 import { deliveryIsStillValid, listDeliveries, requeueProviderOptOutTournamentInvites } from '../src/lib/delivery';
 import { sendDueReminders } from '../src/lib/jobs';
+import { automaticTournamentInvite } from '../src/lib/messages';
 import { cancelTournament, rescheduleTournament, tickTournaments } from '../src/lib/tournament';
 import { sms } from '../src/routes/sms';
 import { createTestDb } from './d1-fixture';
@@ -77,7 +79,7 @@ describe('designated dealer tournament SMS', () => {
     legacy.close();
   });
 
-  it('covers an already-ACTIVE plan idempotently without reserving a ninth player seat', async () => {
+  it('uses the qualified-player invitation byte-for-byte without reserving a ninth player seat', async () => {
     const { db, sqlite, env } = fixture();
 
     const first = await tickTournaments(env, new Date(NOW));
@@ -88,12 +90,37 @@ describe('designated dealer tournament SMS', () => {
     expect(sqlite.prepare("SELECT COUNT(*) AS n FROM tournament_offers WHERE state IN ('ACTIVE','CONFIRMED')").get()).toEqual({ n: 8 });
     expect(sqlite.prepare('SELECT COUNT(*) AS n FROM tournament_offers WHERE member_phone=?').get(DEALER)).toEqual({ n: 0 });
     const notices = (await listDeliveries(db, 'plan')).filter((d) => d.kind === 'DEALER_TOURNAMENT_NOTICE');
+    const game = await getGame(db, 'game');
     expect(notices).toHaveLength(1);
     expect(notices[0]).toMatchObject({ recipient: DEALER, offer_id: null, state: 'QUEUED', expires_at: START });
-    expect(notices[0]?.body).toContain('designated dealer');
-    expect(notices[0]?.body).toContain("Poppa P's");
-    expect(notices[0]?.body).toContain('No RSVP is needed');
-    expect(notices[0]?.body).toContain('Player invitations are open through');
+    expect(notices[0]?.body).toBe(automaticTournamentInvite(env, game!, DEADLINE));
+  });
+
+  it('keeps an already-delivered current-version notice unchanged across later ticks', async () => {
+    const { db, sqlite, env } = fixture();
+    const originalBody = 'Previously delivered dealer notice copy';
+    sqlite.prepare(
+      `INSERT INTO sms_deliveries
+       (id,logical_key,plan_id,game_id,recipient,kind,body,version,state,provider_sid,
+        provider_status,provider_status_rank,expires_at,created_at,updated_at)
+       VALUES('existing-dealer-notice','tournament:plan:dealer-notice:v1','plan','game',?,
+        'DEALER_TOURNAMENT_NOTICE',?,1,'DELIVERED','SMexisting','delivered',30,?,?,?)`,
+    ).run(DEALER, originalBody, START, NOW, NOW);
+
+    const first = await tickTournaments(env, new Date(NOW));
+    const second = await tickTournaments(env, new Date('2026-09-14T17:00:00.000Z'));
+    const notices = (await listDeliveries(db, 'plan')).filter((d) => d.kind === 'DEALER_TOURNAMENT_NOTICE');
+
+    expect(first.dealerNoticesQueued).toBe(0);
+    expect(second.dealerNoticesQueued).toBe(0);
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toMatchObject({
+      id: 'existing-dealer-notice',
+      logical_key: 'tournament:plan:dealer-notice:v1',
+      version: 1,
+      state: 'DELIVERED',
+      body: originalBody,
+    });
   });
 
   it('ensures a newly assigned dealer notice after player replies close and before play', async () => {
@@ -108,8 +135,7 @@ describe('designated dealer tournament SMS', () => {
 
     expect(late.dealerNoticesQueued).toBe(1);
     expect(notice).toMatchObject({ recipient: DEALER, expires_at: START, state: 'QUEUED' });
-    expect(notice?.body).toContain('The player response deadline was');
-    expect(notice?.body).not.toContain('invitations are open');
+    expect(notice?.body).toBe(automaticTournamentInvite(env, (await getGame(db, 'game'))!, DEADLINE));
 
     sqlite.prepare("UPDATE sms_deliveries SET state='FAILED',last_error_code='21610',last_error='opted out' WHERE id=?")
       .run(notice!.id);

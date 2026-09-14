@@ -18,7 +18,6 @@ import {
   automaticTournamentInvite,
   designatedDealerDateChangedMessage,
   designatedDealerTournamentCancelledMessage,
-  designatedDealerTournamentNotice,
   tournamentCancelledMessage,
   tournamentDateChangedMessage,
 } from './messages';
@@ -648,7 +647,7 @@ async function ensureDesignatedDealerNotices(env: Env, plan: TournamentPlanRow, 
       logicalKey,
       recipient: dealer.phone,
       kind: 'DEALER_TOURNAMENT_NOTICE',
-      body: designatedDealerTournamentNotice(env, game, plan.confirmation_deadline, now),
+      body: automaticTournamentInvite(env, game, plan.confirmation_deadline),
       now: nowIso,
       planId: plan.id,
       gameId: plan.game_id,
@@ -974,7 +973,7 @@ export async function rescheduleTournament(
       const keyPart = notified ? 'dealer-date-change' : 'dealer-notice';
       const body = notified
         ? designatedDealerDateChangedMessage(env, updatedGame, activeDeadline, now)
-        : designatedDealerTournamentNotice(env, updatedGame, activeDeadline, now);
+        : automaticTournamentInvite(env, updatedGame, activeDeadline);
       statements.push(
         env.DB.prepare(
           `INSERT OR IGNORE INTO sms_deliveries
