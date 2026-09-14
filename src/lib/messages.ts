@@ -154,6 +154,40 @@ export function tournamentCancelledMessage(env: Env): string {
   return `${env.PROGRAM_NAME}: The upcoming Special Players tournament has been cancelled. Reply STOP to opt out.`;
 }
 
+const dealerPlayerDeadlineText = (env: Env, playerDeadline: string, now: Date): string =>
+  playerDeadline > now.toISOString()
+    ? `Player invitations are open through ${formatWhen(playerDeadline, env.TIMEZONE)}.`
+    : `The player response deadline was ${formatWhen(playerDeadline, env.TIMEZONE)}.`;
+
+export function designatedDealerTournamentNotice(env: Env, game: Game, playerDeadline: string, now = new Date()): string {
+  return (
+    `${env.PROGRAM_NAME}: You're the designated dealer for the Special Players tournament ` +
+    `${formatWhen(game.starts_at, env.TIMEZONE)} at ${game.location}. No RSVP is needed for the dealer role, ` +
+    `and it does not take a player seat. ${dealerPlayerDeadlineText(env, playerDeadline, now)} ` +
+    `Reply STOP to opt out.`
+  );
+}
+
+export function designatedDealerTournamentReminder(env: Env, game: Game): string {
+  return (
+    `${env.PROGRAM_NAME}: 🏆 Reminder — you're the designated dealer for the Special Players tournament ` +
+    `${formatWhen(game.starts_at, env.TIMEZONE)} at ${game.location}. No RSVP is needed; this is the dealer role, not a player seat. ` +
+    `Reply STOP to opt out.`
+  );
+}
+
+export function designatedDealerDateChangedMessage(env: Env, game: Game, playerDeadline: string, now = new Date()): string {
+  return (
+    `${env.PROGRAM_NAME}: Designated dealer update — the Special Players tournament now starts ` +
+    `${formatWhen(game.starts_at, env.TIMEZONE)} at ${game.location}. No RSVP is needed. ` +
+    `${dealerPlayerDeadlineText(env, playerDeadline, now)} Reply STOP to opt out.`
+  );
+}
+
+export function designatedDealerTournamentCancelledMessage(env: Env): string {
+  return `${env.PROGRAM_NAME}: The Special Players tournament you were scheduled to deal has been cancelled. Reply STOP to opt out.`;
+}
+
 export function tournamentOfferExpiredMessage(env: Env): string {
   return `${env.PROGRAM_NAME}: That Special Players seat is no longer available. You're still on the regular game-reminder list. Reply STOP to opt out.`;
 }

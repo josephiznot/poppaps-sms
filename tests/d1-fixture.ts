@@ -11,7 +11,7 @@ export function createTestDb(migrate = true): { db: D1Database; sqlite: SqliteDa
   if (migrate) {
     // Fresh schema already includes 0005; 0006+ tables may be supplied separately
     // while implementing. CREATE IF NOT EXISTS makes this compatible with final schema.
-    for (const file of readdirSync(resolve('migrations')).filter(f => /^000[6-9].*\.sql$/.test(f)))
+    for (const file of readdirSync(resolve('migrations')).filter(f => /^000[67].*\.sql$/.test(f)))
       sqlite.exec(readFileSync(resolve('migrations', file), 'utf8'));
   }
   class Statement {

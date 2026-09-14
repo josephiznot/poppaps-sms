@@ -8,6 +8,10 @@ export type DeliveryKind =
   | 'TOURNAMENT_REMINDER'
   | 'TOURNAMENT_DATE_CHANGE'
   | 'TOURNAMENT_CANCELLED'
+  | 'DEALER_TOURNAMENT_NOTICE'
+  | 'DEALER_TOURNAMENT_REMINDER'
+  | 'DEALER_TOURNAMENT_DATE_CHANGE'
+  | 'DEALER_TOURNAMENT_CANCELLED'
   | 'PROMO';
 
 export type DeliveryState =
@@ -186,8 +190,33 @@ export async function deliveryIsStillValid(db: D1Database, d: DeliveryRow, nowIs
     .bind(d.plan_id)
     .first<{ status: string; schedule_version: number; cancelled: number; starts_at: string }>();
   if (!plan || plan.schedule_version !== d.version) return false;
-  if (d.kind === 'TOURNAMENT_CANCELLED') return plan.status === 'CANCELLED';
+  if (d.kind === 'TOURNAMENT_CANCELLED' || d.kind === 'DEALER_TOURNAMENT_CANCELLED') {
+    if (plan.status !== 'CANCELLED') return false;
+    if (d.kind === 'TOURNAMENT_CANCELLED') return true;
+    const priorNotice = await db
+      .prepare(
+        `SELECT id FROM sms_deliveries
+         WHERE plan_id=? AND recipient=? AND kind IN ('DEALER_TOURNAMENT_NOTICE','DEALER_TOURNAMENT_DATE_CHANGE')
+           AND state IN ('SENDING','ACCEPTED','DELIVERED','UNKNOWN') LIMIT 1`,
+      )
+      .bind(d.plan_id, d.recipient)
+      .first<{ id: string }>();
+    return !!priorNotice;
+  }
   if (plan.status !== 'ACTIVE' || plan.cancelled || plan.starts_at <= nowIso) return false;
+
+  if (d.kind.startsWith('DEALER_')) {
+    const dealer = await db
+      .prepare("SELECT phone FROM members WHERE phone=? AND status='SUBSCRIBED' AND is_designated_dealer=1")
+      .bind(d.recipient)
+      .first<{ phone: string }>();
+    if (!dealer) return false;
+    const playerOffer = await db
+      .prepare("SELECT id FROM tournament_offers WHERE plan_id=? AND member_phone=? AND state IN ('ACTIVE','CONFIRMED')")
+      .bind(d.plan_id, d.recipient)
+      .first<{ id: string }>();
+    return !playerOffer;
+  }
 
   const offer = await db
     .prepare("SELECT state FROM tournament_offers WHERE id=? AND plan_id=? AND member_phone=?")
@@ -294,7 +323,7 @@ export async function retryDelivery(env: Env, id: string, now = new Date()): Pro
 }
 
 /**
- * Recover tournament invitations that Twilio definitively rejected because its
+ * Recover tournament invitations or designated-dealer notices that Twilio definitively rejected because its
  * own opt-out state had not yet been cleared. An authoritative inbound START is
  * the evidence that the provider block is gone; all business intent is checked
  * again here before returning the existing logical message to the outbox.
@@ -312,12 +341,13 @@ export async function requeueProviderOptOutTournamentInvites(
            claim_token=NULL, claimed_at=NULL, last_error_code=NULL, last_error=NULL,
            updated_at=?
        WHERE recipient=?
-         AND kind='TOURNAMENT_INVITE'
+         AND kind IN ('TOURNAMENT_INVITE','DEALER_TOURNAMENT_NOTICE')
          AND state='FAILED'
          AND last_error_code='21610'
          AND provider_sid IS NULL
          AND (expires_at IS NULL OR expires_at>?)
-         AND EXISTS (
+         AND (
+          (kind='TOURNAMENT_INVITE' AND EXISTS (
            SELECT 1
            FROM tournament_offers o
            JOIN tournament_plans p ON p.id=o.plan_id
@@ -331,9 +361,29 @@ export async function requeueProviderOptOutTournamentInvites(
              AND g.id=sms_deliveries.game_id
              AND g.cancelled=0
              AND g.starts_at>?
-         )`,
+          ))
+          OR
+          (kind='DEALER_TOURNAMENT_NOTICE' AND EXISTS (
+            SELECT 1
+            FROM tournament_plans p
+            JOIN games g ON g.id=p.game_id
+            JOIN members m ON m.phone=sms_deliveries.recipient
+            WHERE p.id=sms_deliveries.plan_id
+              AND g.id=sms_deliveries.game_id
+              AND p.status='ACTIVE'
+              AND p.schedule_version=sms_deliveries.version
+              AND g.cancelled=0
+              AND g.starts_at>?
+              AND m.status='SUBSCRIBED'
+              AND m.is_designated_dealer=1
+              AND NOT EXISTS (
+                SELECT 1 FROM tournament_offers o
+                WHERE o.plan_id=p.id AND o.member_phone=m.phone
+                  AND o.state IN ('ACTIVE','CONFIRMED')
+              )
+          )))`,
     )
-    .bind(nowIso, recipient, nowIso, nowIso, nowIso)
+    .bind(nowIso, recipient, nowIso, nowIso, nowIso, nowIso)
     .run();
   return result.meta.changes ?? 0;
 }

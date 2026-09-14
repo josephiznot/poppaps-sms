@@ -1,8 +1,8 @@
 /** Cron + side-effect logic: send reminders, evaluate attendance rewards. */
-import type { Env } from '../types';
+import type { Env, Game } from '../types';
 import * as db from './db';
 import { sendSms } from './twilio';
-import { gameReminder, promoMessage } from './messages';
+import { designatedDealerTournamentReminder, gameReminder, promoMessage } from './messages';
 import { drainOutbox, queueDelivery } from './delivery';
 import { tournamentOffers, getTournamentPlan } from './tournament-db';
 import { crossedRewardThreshold } from './points';
@@ -81,16 +81,14 @@ export async function ensureUpcomingGames(env: Env, now = new Date()): Promise<n
 /**
  * Cron job: remind subscribers about games starting within the lead window.
  * Regular games go to the whole subscribed list; a Special Players tournament
- * is invite-only, so its reminder goes ONLY to the invited players (the RSVP
- * roster of the season whose close attached this game). If no invites are
- * linked to a tournament game, nobody is reminded — better silent than leaking
- * an open invitation to the whole roster.
+ * is invite-only, so its player reminder goes only to current offers. A separate
+ * designated-dealer reminder does not imply a player seat. If neither current
+ * offers nor a designated dealer exists, nobody is reminded.
  */
 export async function sendDueReminders(env: Env, now = new Date()): Promise<{ games: number; queued: number }> {
   const leadHours = Number(env.REMINDER_LEAD_HOURS || '24');
   const cutoff = new Date(now.getTime() + leadHours * 3600 * 1000);
   const games = await db.gamesDueForReminder(env.DB, now.toISOString(), cutoff.toISOString());
-  if (games.length === 0) return { games: 0, queued: 0 };
 
   const phones = await db.listSubscribedPhones(env.DB);
   let queued = 0;
@@ -143,6 +141,39 @@ export async function sendDueReminders(env: Env, now = new Date()): Promise<{ ga
       await env.DB.prepare('UPDATE games SET reminder_sent=1 WHERE id=? AND starts_at=?').bind(game.id, game.starts_at).run();
     }
     console.log(JSON.stringify({ msg: 'reminders queued', gameId: game.id, tournament: !!game.is_tournament, queued: recipients.length }));
+  }
+  // Dealer roles can be assigned after the player reminder batch marked the game
+  // complete, so ensure their per-recipient reminder independently on every tick.
+  const duePlans = await env.DB.prepare(
+    `SELECT p.id AS plan_id, p.schedule_version, g.*
+     FROM tournament_plans p JOIN games g ON g.id=p.game_id
+     WHERE p.status='ACTIVE' AND g.cancelled=0 AND g.starts_at>=? AND g.starts_at<=?`,
+  ).bind(now.toISOString(), cutoff.toISOString()).all<Game & { plan_id: string; schedule_version: number }>();
+  const dealers = await env.DB
+    .prepare("SELECT phone FROM members WHERE is_designated_dealer=1 AND status='SUBSCRIBED' ORDER BY phone")
+    .all<{ phone: string }>();
+  for (const plan of duePlans.results ?? []) {
+    for (const dealer of dealers.results ?? []) {
+      const playerOffer = await env.DB.prepare(
+        "SELECT id FROM tournament_offers WHERE plan_id=? AND member_phone=? AND state IN ('ACTIVE','CONFIRMED')",
+      ).bind(plan.plan_id, dealer.phone).first<{ id: string }>();
+      if (playerOffer) continue;
+      const logicalKey = `game:${plan.id}:dealer-reminder:v${plan.schedule_version}`;
+      const existing = await env.DB.prepare('SELECT id FROM sms_deliveries WHERE logical_key=? AND recipient=?')
+        .bind(logicalKey, dealer.phone).first<{ id: string }>();
+      await queueDelivery(env.DB, {
+        logicalKey,
+        recipient: dealer.phone,
+        kind: 'DEALER_TOURNAMENT_REMINDER',
+        body: designatedDealerTournamentReminder(env, plan),
+        now: now.toISOString(),
+        planId: plan.plan_id,
+        gameId: plan.id,
+        version: plan.schedule_version,
+        expiresAt: plan.starts_at,
+      });
+      if (!existing) queued++;
+    }
   }
   return { games: games.length, queued };
 }

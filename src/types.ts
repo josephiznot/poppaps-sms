@@ -37,6 +37,7 @@ export interface Member {
   opted_out_at: string | null;
   created_at: string;
   updated_at: string;
+  is_designated_dealer?: number;
 }
 
 export interface Game {

@@ -25,7 +25,7 @@ persistent intent precedes provider sends; no blind retry
 of uncertain sends. Expired/replaced offers cannot reclaim seats. The system stays
 on Cloudflare/D1/Twilio and is completely separate from Skooped or other projects.
 The public footer credit has been removed. Do not load unrelated business records.
-Apply migrations 0005, 0006, then 0007 before deploying. Use Node 24+ for
+Apply migrations 0005, 0006, 0007, then 0008 before deploying. Use Node 24+ for
 SQLite tests.
 Result edits preserve season attribution and use atomic, version-guarded replacement.
 Public profile IDs are stored random identifiers; always minimize public names.
@@ -101,9 +101,15 @@ seats. Reminder recipients are current offers only. STOP/HELP remain load-bearin
 Per-recipient SID and status distinguish provider acceptance from delivery.
 Unknown transport outcomes never automatically retry.
 A signed provider-standard Twilio START or UNSTOP may recover only a definite
-no-SID 21610 failure for the sender's active, unexpired tournament invitation;
+no-SID 21610 failure for the sender's active, unexpired tournament invitation or
+still-current designated-dealer notice;
 it queues the existing logical delivery for the hourly outbox and never sends
 from the webhook.
+A subscribed designated dealer receives separate tournament notice and night-before
+reminder copy without a seat offer or CALL/FOLD. A current player offer takes
+precedence. Hourly ticks cover plans already ACTIVE; reschedules, cancellations,
+STOP and narrow no-SID 21610 recovery follow ADR-0010. Dealer notice eligibility
+continues until tournament start and does not end at the player response deadline.
 
 ## Interaction surfaces (ADR-0005)
 
@@ -137,6 +143,7 @@ from the webhook.
    public standings). (ADR-0002, ADR-0005)
 4. **Special Players tournament** — ✅ built (admin: automatic quarterly calendar → frozen qualification → durable invites). (ADR-0002)
    - **Seat RSVPs** — ✅ built (reply IN to confirm; admin tracker + automatic clear-cut next-in-line backfill; invitee-only tournament reminders). (ADR-0006)
+   - **Designated dealer** — ✅ built (role-based notice/reminder lifecycle; no ranked seat consumed). (ADR-0010)
 5. **Rewards / attendance** — ✅ mechanism built (host-marked attendance →
    data-driven promos via SMS); concrete reward rules still forming —
    `seed.sql` has a placeholder. (ADR-0004)
@@ -223,3 +230,4 @@ SMS admin *(superseded)*, `0004` rewards & attendance, `0005` interaction channe
 (IN confirm + host-paced backfill), `0007` tournament placements (ranks saved
 with 0 points; real champion on /seasons), `0008` public tournament visibility
 (invite-only notice, never "next game").
+`0009` defines automatic tournament operations; `0010` defines designated-dealer messaging.
