@@ -293,6 +293,51 @@ export async function retryDelivery(env: Env, id: string, now = new Date()): Pro
   return (result.meta.changes ?? 0) === 1;
 }
 
+/**
+ * Recover tournament invitations that Twilio definitively rejected because its
+ * own opt-out state had not yet been cleared. An authoritative inbound START is
+ * the evidence that the provider block is gone; all business intent is checked
+ * again here before returning the existing logical message to the outbox.
+ */
+export async function requeueProviderOptOutTournamentInvites(
+  db: D1Database,
+  recipient: string,
+  now = new Date(),
+): Promise<number> {
+  const nowIso = now.toISOString();
+  const result = await db
+    .prepare(
+      `UPDATE sms_deliveries
+       SET state='QUEUED', retryable=0, provider_status=NULL, provider_status_rank=0,
+           claim_token=NULL, claimed_at=NULL, last_error_code=NULL, last_error=NULL,
+           updated_at=?
+       WHERE recipient=?
+         AND kind='TOURNAMENT_INVITE'
+         AND state='FAILED'
+         AND last_error_code='21610'
+         AND provider_sid IS NULL
+         AND (expires_at IS NULL OR expires_at>?)
+         AND EXISTS (
+           SELECT 1
+           FROM tournament_offers o
+           JOIN tournament_plans p ON p.id=o.plan_id
+           JOIN games g ON g.id=p.game_id
+           WHERE o.id=sms_deliveries.offer_id
+             AND o.plan_id=sms_deliveries.plan_id
+             AND o.member_phone=sms_deliveries.recipient
+             AND o.state='ACTIVE'
+             AND o.response_deadline>?
+             AND p.status='ACTIVE'
+             AND g.id=sms_deliveries.game_id
+             AND g.cancelled=0
+             AND g.starts_at>?
+         )`,
+    )
+    .bind(nowIso, recipient, nowIso, nowIso, nowIso)
+    .run();
+  return result.meta.changes ?? 0;
+}
+
 const providerRank = (status: string): number => {
   switch (status.toLowerCase()) {
     case 'accepted': return 10;

@@ -2,7 +2,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { isValidTwilioSignature, twiml, twimlEmpty } from '../lib/twilio';
-import { updateDeliveryStatus } from '../lib/delivery';
+import { requeueProviderOptOutTournamentInvites, updateDeliveryStatus } from '../lib/delivery';
 import { respondToTournamentOffer } from '../lib/tournament';
 import {
   parseIntent,
@@ -114,6 +114,7 @@ sms.post('/', async (c) => {
   }
   if (optOutType === 'START') {
     const result = await db.joinMember(c.env.DB, from, `sms:${body.trim().slice(0, 20)}`, now);
+    await requeueProviderOptOutTournamentInvites(c.env.DB, from, new Date(now));
     // Twilio already confirms renewed consent. Add only the missing identity
     // prompt when this number has never supplied a usable display name.
     return result.askName ? twiml(askNameMessage(c.env)) : twimlEmpty();
@@ -157,6 +158,9 @@ sms.post('/', async (c) => {
         return twiml(rejoinMessage(c.env));
       }
       const res = await db.joinMember(c.env.DB, from, `sms:${body.trim().slice(0, 20)}`, now);
+      if (firstWord === 'start' || firstWord === 'unstop') {
+        await requeueProviderOptOutTournamentInvites(c.env.DB, from, new Date(now));
+      }
       if (res.alreadySubscribed) return twiml(alreadyMemberMessage(c.env));
       if (res.reactivated && !res.askName && member?.display_name) {
         return twiml(welcomeBackMessage(c.env, member.display_name));

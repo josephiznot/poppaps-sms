@@ -73,7 +73,11 @@ regress.
   START or UNSTOP. Renewing consent preserves their stored display name and
   public profile ID; the name prompt appears only when no usable name exists.
   Twilio `OptOutType` is authoritative when present, and provider-handled
-  lifecycle messages do not receive a duplicate app confirmation.
+  lifecycle messages do not receive a duplicate app confirmation. A signed
+  provider-standard START or UNSTOP, including an authoritative OptOutType START,
+  also requeues the sender's current tournament invitation only when its definite
+  failure was Twilio error 21610 with no provider SID; the webhook itself does not
+  send the invitation.
 - FR-R2. A game-night reminder goes out before each scheduled game, in
   America/Chicago, framed as a reminder (not gambling). **A Special Players
   tournament game is invite-only: its reminder goes to the invited (RSVP)
@@ -123,7 +127,7 @@ regress.
 - FR-T7. Opted-out qualifiers retain their historical earned place and receive no SMS. Every dispatch rechecks subscription. Eligible replacements follow the frozen board; unresolved replacement ties require host choice.
 - FR-T8. CALL confirms an active offer; FOLD declines while preserving reminder subscription. STOP and HELP remain authoritative. Pending offers expire at their stored deadline. Replaced, expired, cancelled and completed-event offers cannot reclaim seats or promise attendance.
 - FR-T9. Clear vacancies are filled automatically until twenty-four hours before play. Replacement offers expire twenty-four hours after they are made, capped at twenty-four hours before play. At most eight active/confirmed offers may reserve seats. Current offers receive reminders; declined, replaced and opted-out players do not.
-- FR-T10. Per-recipient durable delivery state distinguishes queued, accepted, delivered, failed and unknown. Uncertain transport is never automatically resent. Repeated cron ticks, form submissions and callbacks do not duplicate logical work.
+- FR-T10. Per-recipient durable delivery state distinguishes queued, accepted, delivered, failed and unknown. Uncertain transport is never automatically resent. Repeated cron ticks, form submissions and callbacks do not duplicate logical work. A signed provider-standard START or UNSTOP, with or without OptOutType, may return the sender's definite no-SID 21610 tournament-invite failure to the hourly outbox only while its linked offer and plan remain active, its response deadline and delivery remain unexpired, and its linked game remains future and uncancelled. Other opt-in words, delivery kinds and states are never recovered by this path.
 - FR-T11. Rescheduling preserves the plan/game and any closed season, rejects conflicts, updates deadlines and sends one versioned notice to current invitees. Cancellation retires offers, suppresses stale work and does not regenerate that quarter.
 
 ### 2.5 Attendance & rewards
