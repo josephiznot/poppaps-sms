@@ -16,6 +16,11 @@
 > A subscribed designated dealer receives the exact initial qualified-player invite
 > body for copy validation, followed by dealer-specific lifecycle messages, without
 > consuming a ranked seat or gaining a CALL/FOLD-actionable offer (ADR-0010).
+> For the already-active 2026-Q4 tournament only, the host extended the remaining
+> active initial offers on September 21 from 10:00 AM to 9:00 PM Central. This did
+> not reopen confirmed or retired offers, rewrite delivered texts or the frozen
+> season snapshot, or change the schedule version. Later tournaments keep the
+> ordinary seven-day/10:00 AM deadline.
 
 - **Status:** Consolidated draft for build (supersedes the 2026-06-08 hashing draft)
 - **Date:** 2026-06-08
@@ -122,7 +127,7 @@ regress.
 
 ### 2.4 Special Players tournament (ADR-0009)
 - FR-T1. Automatic quarterly scheduling: first Monday on the regular cadence's off week at 18:30 America/Chicago. The one-time 2026-Q4 transition is September 28, with September 7 as the last scoring game; the normal rule resumes in 2027. Only the next future occurrence is materialized. Host overrides and cancellations persist.
-- FR-T2. At 10:00 Central fourteen calendar days before play, validate qualification and atomically persist the season boundary, complete ranked board, selected eight qualifiers, seat offers and unique outbound intent. Only then dispatch invitations. Initial invitees have exactly seven calendar days to respond, until 10:00 Central seven days before play. No routine host approval is required.
+- FR-T2. At 10:00 Central fourteen calendar days before play, validate qualification and atomically persist the season boundary, complete ranked board, selected eight qualifiers, seat offers and unique outbound intent. Only then dispatch invitations. Initial invitees have exactly seven calendar days to respond, until 10:00 Central seven days before play. No routine host approval is required. The one-time 2026-Q4 exception extended only still-active initial offers on September 21 to 9:00 PM Central; it did not change the recurring policy.
 - FR-T3. Season reset is a recorded boundary, never deletion. Complete frozen standings preserve replacement order after later result corrections. Edits cannot move a game to a new season.
 - FR-T4. Missing regular-game results, fewer than eight scoring players, and equal-point ties across the eighth seat block automatic invitations. The host selects only from the unresolved tied group; higher scoring players retain their places.
 - FR-T5. Tournament placements are recorded with zero points. Zero-point rows cannot affect scoring tie-breaks. Tied first-place finishers are co-winners in public summaries.

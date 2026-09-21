@@ -25,7 +25,9 @@ persistent intent precedes provider sends; no blind retry
 of uncertain sends. Expired/replaced offers cannot reclaim seats. The system stays
 on Cloudflare/D1/Twilio and is completely separate from Skooped or other projects.
 The public footer credit has been removed. Do not load unrelated business records.
-Apply migrations 0005, 0006, 0007, then 0008 before deploying. Use Node 24+ for
+Apply migrations 0005, 0006, 0007, 0008, then 0009 before deploying. Migration
+0009 is an idempotent record of the already-applied 2026-Q4 deadline exception;
+it leaves the corrected version-5 production plan unchanged. Use Node 24+ for
 SQLite tests.
 Result edits preserve season attribution and use atomic, version-guarded replacement.
 Public profile IDs are stored random identifiers; always minimize public names.
@@ -91,6 +93,12 @@ Central. Invitations and qualification close happen fourteen days before at 10:0
 initial replies are due seven days before at 10:00. The host records results and
 changes dates only for conflicts. Missing results, insufficient standings, cutoff ties and
 uncertain delivery appear as exceptions in the admin Tournament page.
+
+One-time 2026-Q4 exception: before the September 21 cutoff, the host extended only
+the remaining active initial offers from 10:00 AM to 9:00 PM Central that day. The
+plan deadline moved with them; confirmed and retired offers, delivered message
+bodies, the frozen season snapshot and the schedule version did not change. The
+ordinary 10:00 AM policy continues for later tournaments.
 
 The full board, qualifiers, season boundary, seat offers and unique outbound work
 are persisted atomically before sending. Opted-out qualifiers remain in historical
