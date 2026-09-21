@@ -34,7 +34,9 @@
     "db:migrate:0009:local": "wrangler d1 execute poker-sms --local --file=./migrations/0009_q4_deadline_extension.sql",
     "db:migrate:0009:remote": "wrangler d1 execute poker-sms --remote --file=./migrations/0009_q4_deadline_extension.sql",
     "db:migrate:0010:local": "wrangler d1 execute poker-sms --local --file=./migrations/0010_host_player_policy.sql",
-    "db:migrate:0010:remote": "wrangler d1 execute poker-sms --remote --file=./migrations/0010_host_player_policy.sql"
+    "db:migrate:0010:remote": "wrangler d1 execute poker-sms --remote --file=./migrations/0010_host_player_policy.sql",
+    "db:migrate:0011:local": "wrangler d1 execute poker-sms --local --file=./migrations/0011_repair_replacement_delivery_chain.sql",
+    "db:migrate:0011:remote": "wrangler d1 execute poker-sms --remote --file=./migrations/0011_repair_replacement_delivery_chain.sql"
   },
   "dependencies": {
     "hono": "^4.13.7"

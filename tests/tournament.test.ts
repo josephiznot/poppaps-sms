@@ -9,6 +9,7 @@ import {
   tournamentDeadlines,
   tournamentOccurrenceForQuarter,
 } from '../src/lib/tournament';
+import { automaticTournamentInvite } from '../src/lib/messages';
 import { createTestDb } from './d1-fixture';
 
 const envFor = (db: D1Database): Env => ({
@@ -100,8 +101,8 @@ describe('automatic tournament lifecycle', () => {
     expect(summary.plan?.season_id).toBeNull();
   });
 
-  it('retires a folded seat before replacement and rejects its later CALL', async () => {
-    const { db } = createTestDb();
+  it('queues one offer-linked invite for a clear replacement and does not duplicate it on later ticks', async () => {
+    const { db, sqlite } = createTestDb();
     const env = envFor(db);
     await tickTournaments(env, new Date('2026-03-01T12:00:00.000Z'));
     const phones = await seedScoring(db, [12, 11, 10, 9, 8, 7, 6, 5, 4]);
@@ -111,7 +112,26 @@ describe('automatic tournament lifecycle', () => {
     expect(summary.offers).toHaveLength(9);
     expect(summary.offers.find((o) => o.member_phone === phones[0])?.state).toBe('REPLACED');
     expect(summary.offers.filter((o) => ['ACTIVE', 'CONFIRMED'].includes(o.state))).toHaveLength(8);
-    expect(summary.offers.find((o) => o.member_phone === phones[8])?.response_deadline).toBe('2026-04-01T12:00:00.000Z');
+    const replacement = summary.offers.find((o) => o.member_phone === phones[8])!;
+    expect(replacement.response_deadline).toBe('2026-04-01T12:00:00.000Z');
+    const game = sqlite.prepare('SELECT * FROM games WHERE id=?').get(summary.plan!.game_id) as unknown as Parameters<typeof automaticTournamentInvite>[1];
+    const replacementDeliveries = summary.deliveries.filter((delivery) => delivery.offer_id === replacement.id);
+    expect(replacementDeliveries).toHaveLength(1);
+    expect(replacementDeliveries[0]).toMatchObject({
+      logical_key: `tournament:${summary.plan!.id}:replacement:${phones[8]}`,
+      recipient: phones[8],
+      kind: 'TOURNAMENT_INVITE',
+      body: automaticTournamentInvite(env, game, replacement.response_deadline, true),
+      state: 'QUEUED',
+      expires_at: game.starts_at,
+      created_at: '2026-03-31T12:00:00.000Z',
+      updated_at: '2026-03-31T12:00:00.000Z',
+    });
+
+    await tickTournaments(env, new Date('2026-03-31T13:00:00.000Z'));
+    await tickTournaments(env, new Date('2026-03-31T14:00:00.000Z'));
+    expect((await getTournamentSummary(db, new Date('2026-03-31T14:00:00.000Z'))).deliveries
+      .filter((delivery) => delivery.offer_id === replacement.id)).toHaveLength(1);
     expect((await respondToTournamentOffer(env, phones[0]!, 'CONFIRM', new Date('2026-03-31T12:01:00.000Z'))).outcome).not.toBe('CONFIRMED');
   });
 

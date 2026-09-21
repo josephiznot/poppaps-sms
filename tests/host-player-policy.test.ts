@@ -296,3 +296,144 @@ describe('2026-Q4 host-offer migration', () => {
     });
   });
 });
+
+describe('2026-Q4 replacement-delivery repair migration', () => {
+  it('unwinds only the never-delivered chain and lets the next tick invite rank 9 once', async () => {
+    const { db, sqlite } = createTestDb();
+    const env = envFor(db);
+    const planId = '3ddbe6ee-19d6-49b9-b165-bb62513ac814';
+    const seasonId = 'de5fded5-f84b-424f-91dd-2aceb9dbbee6';
+    const sourceId = '37eb98c0-a396-4815-8637-c4a05746f28e';
+    const seanId = '7e6b7b04-1031-4752-9360-b373b28c9ef0';
+    const tylerId = '6eec5ee5-dd89-450f-bd40-7027158f29d0';
+    const gleasonId = '0b5d5534-d77e-4903-bf9e-5c8e9e7a31c3';
+    const sourcePhone = '+18033197543';
+    const seanPhone = '+16298990220';
+    const tylerPhone = '+14409850104';
+    const gleasonPhone = '+13345240200';
+    const hostPhone = '+15550000012';
+
+    sqlite.exec(`
+      INSERT INTO games(id,starts_at,location,is_tournament,cancelled,created_at)
+      VALUES('q4-game','2026-09-28T23:30:00.000Z','Poppa P''s Smoke Shoppe & Lounge',1,0,'2026-09-13T00:00:00.000Z');
+      INSERT INTO seasons(id,closed_at,snapshot)
+      VALUES('${seasonId}','2026-09-14T15:00:00.000Z','{}');
+      INSERT INTO tournament_plans(
+        id,quarter_key,game_id,status,planned_starts_at,qualification_cutoff,confirmation_deadline,
+        season_id,version,schedule_version,closed_at,created_at,updated_at
+      ) VALUES(
+        '${planId}','2026-Q4','q4-game','ACTIVE','2026-09-28T23:30:00.000Z',
+        '2026-09-14T15:00:00.000Z','2026-09-22T02:00:00.000Z','${seasonId}',6,1,
+        '2026-09-14T15:00:00.000Z','2026-09-13T00:00:00.000Z','2026-09-21T15:00:33.116Z');
+    `);
+    const phonesByRank = new Map<number, string>([
+      [1, '+15550000001'], [2, '+15550000002'], [3, '+15550000003'], [4, sourcePhone],
+      [5, '+15550000005'], [6, '+15550000006'], [7, '+15550000007'], [8, '+15550000008'],
+      [9, seanPhone], [10, tylerPhone], [11, gleasonPhone], [12, hostPhone],
+    ]);
+    for (const [rank, phone] of phonesByRank) {
+      sqlite.prepare(
+        `INSERT INTO members(phone,display_name,status,awaiting_name,created_at,updated_at,is_designated_dealer)
+         VALUES(?,?,'SUBSCRIBED',0,'2026-09-01T00:00:00.000Z','2026-09-21T15:00:33.116Z',?)`,
+      ).run(phone, rank === 9 ? 'Sean L.' : rank === 10 ? 'Tyler R.' : rank === 11 ? 'Gleason J.' : `Player ${rank}`, rank === 12 ? 1 : 0);
+      sqlite.prepare(
+        `INSERT INTO tournament_board(plan_id,member_phone,display_name,rank,score_rank,points,scoring_tiebreak_at,was_subscribed,selected_qualifier)
+         VALUES(?,?,?,?,?,?, '2026-09-07T23:30:00.000Z',1,?)`,
+      ).run(planId, phone, `Player ${rank}`, rank, rank, 20 - rank, rank <= 8 ? 1 : 0);
+    }
+    for (const rank of [1, 2, 3, 5, 6, 7, 8]) {
+      sqlite.prepare(
+        `INSERT INTO tournament_offers(id,plan_id,member_phone,board_rank,state,offered_at,response_deadline,updated_at)
+         VALUES(?,?,?,?,'ACTIVE','2026-09-14T15:00:13.735Z','2026-09-22T02:00:00.000Z','2026-09-14T15:00:13.735Z')`,
+      ).run(`current-${rank}`, planId, phonesByRank.get(rank)!, rank);
+    }
+    sqlite.prepare(
+      `INSERT INTO tournament_offers(
+        id,plan_id,member_phone,board_rank,state,offered_at,response_deadline,declined_at,retired_at,replaced_by_offer_id,updated_at
+       ) VALUES(?,?,?,4,'REPLACED','2026-09-14T15:00:13.735Z','2026-09-21T15:00:00.000Z',
+         '2026-09-14T15:05:35.206Z','2026-09-14T15:05:35.206Z',?,'2026-09-14T15:05:35.206Z')`,
+    ).run(sourceId, planId, sourcePhone, seanId);
+    sqlite.prepare(
+      `INSERT INTO tournament_offers(
+        id,plan_id,member_phone,board_rank,state,offered_at,response_deadline,retired_at,replaced_by_offer_id,updated_at
+       ) VALUES(?,?,?,9,'REPLACED','2026-09-14T15:05:35.206Z','2026-09-15T15:05:35.206Z',
+         '2026-09-15T16:00:50.193Z',?,'2026-09-15T16:00:50.193Z')`,
+    ).run(seanId, planId, seanPhone, tylerId);
+    sqlite.prepare(
+      `INSERT INTO tournament_offers(
+        id,plan_id,member_phone,board_rank,state,offered_at,response_deadline,retired_at,replaced_by_offer_id,updated_at
+       ) VALUES(?,?,?,10,'REPLACED','2026-09-15T16:00:50.193Z','2026-09-16T16:00:50.193Z',
+         '2026-09-16T16:00:53.443Z',?,'2026-09-21T15:00:33.116Z')`,
+    ).run(tylerId, planId, tylerPhone, gleasonId);
+    sqlite.prepare(
+      `INSERT INTO tournament_offers(id,plan_id,member_phone,board_rank,state,offered_at,response_deadline,updated_at)
+       VALUES(?,?,?,11,'ACTIVE','2026-09-21T15:00:33.116Z','2026-09-22T15:00:33.116Z','2026-09-21T15:00:33.116Z')`,
+    ).run(gleasonId, planId, gleasonPhone);
+    sqlite.prepare(
+      `INSERT INTO tournament_host_offers(offer_id,plan_id,member_phone,counts_ranked_seat)
+       VALUES('host-offer',?,?,0)`,
+    ).run(planId, hostPhone);
+    sqlite.prepare(
+      `INSERT INTO tournament_offers(id,plan_id,member_phone,board_rank,state,offered_at,response_deadline,updated_at)
+       VALUES('host-offer',?,?,12,'ACTIVE','2026-09-14T15:00:13.735Z','2026-09-22T02:00:00.000Z','2026-09-14T15:00:13.735Z')`,
+    ).run(planId, hostPhone);
+    sqlite.prepare(
+      `INSERT INTO sms_deliveries(
+        id,logical_key,plan_id,game_id,offer_id,recipient,kind,body,version,state,provider_sid,expires_at,created_at,updated_at
+       ) VALUES('source-delivery',?,?, 'q4-game',?,?,'TOURNAMENT_INVITE','Delivered invite',1,'DELIVERED','SMsource',
+         '2026-09-28T23:30:00.000Z','2026-09-14T15:00:13.735Z','2026-09-14T15:01:00.000Z')`,
+    ).run(`tournament:${planId}:initial-invite`, planId, sourceId, sourcePhone);
+    const falseRsvps: Array<[string, string, string]> = [
+      ['afdc238e-e442-4422-947a-249f309ff88f', seanPhone, '2026-09-14T15:05:35.206Z'],
+      ['7e7821ba-cf40-4ffd-8eb7-e48187b9b87c', tylerPhone, '2026-09-15T16:00:50.193Z'],
+      ['4cdbe178-c177-4a33-a12b-9195048a864e', gleasonPhone, '2026-09-21T15:00:33.116Z'],
+    ];
+    for (const [id, phone, invitedAt] of falseRsvps) {
+      sqlite.prepare('INSERT INTO tournament_rsvps(id,season_id,member_phone,invited_at) VALUES(?,?,?,?)')
+        .run(id, seasonId, phone, invitedAt);
+    }
+    const sourceBefore = sqlite.prepare('SELECT * FROM tournament_offers WHERE id=?').get(sourceId) as Record<string, unknown>;
+    const untouchedOffersBefore = sqlite.prepare(
+      'SELECT * FROM tournament_offers WHERE id NOT IN (?,?,?,?) ORDER BY id',
+    ).all(sourceId, seanId, tylerId, gleasonId);
+    const migration = readFileSync(resolve('migrations/0011_repair_replacement_delivery_chain.sql'), 'utf8');
+
+    sqlite.prepare("UPDATE tournament_offers SET updated_at='2026-09-21T15:00:33.117Z' WHERE id=?").run(gleasonId);
+    sqlite.exec(migration);
+    expect(sqlite.prepare('SELECT replaced_by_offer_id FROM tournament_offers WHERE id=?').get(sourceId)).toEqual({ replaced_by_offer_id: seanId });
+    expect(sqlite.prepare('SELECT COUNT(*) AS n FROM tournament_offers WHERE id IN (?,?,?)').get(seanId, tylerId, gleasonId)).toEqual({ n: 3 });
+    expect(sqlite.prepare('SELECT COUNT(*) AS n FROM tournament_rsvps WHERE id IN (?,?,?)').get(...falseRsvps.map(([id]) => id))).toEqual({ n: 3 });
+    sqlite.prepare("UPDATE tournament_offers SET updated_at='2026-09-21T15:00:33.116Z' WHERE id=?").run(gleasonId);
+
+    sqlite.exec(migration);
+    sqlite.exec(migration);
+
+    expect(sqlite.prepare('SELECT id FROM tournament_offers WHERE id IN (?,?,?)').all(seanId, tylerId, gleasonId)).toEqual([]);
+    expect(sqlite.prepare('SELECT id FROM tournament_rsvps WHERE id IN (?,?,?)').all(...falseRsvps.map(([id]) => id))).toEqual([]);
+    const sourceAfter = sqlite.prepare('SELECT * FROM tournament_offers WHERE id=?').get(sourceId) as Record<string, unknown>;
+    expect({ ...sourceAfter, replaced_by_offer_id: sourceBefore.replaced_by_offer_id }).toEqual(sourceBefore);
+    expect(sourceAfter.replaced_by_offer_id).toBeNull();
+    expect(sqlite.prepare('SELECT * FROM tournament_offers WHERE id<>? ORDER BY id').all(sourceId)).toEqual(untouchedOffersBefore);
+    expect(sqlite.prepare('SELECT status,blocked_reason,tie_score,schedule_version FROM tournament_plans WHERE id=?').get(planId)).toEqual({
+      status: 'ACTIVE', blocked_reason: null, tie_score: null, schedule_version: 1,
+    });
+    expect(sqlite.prepare('SELECT COUNT(*) AS n FROM sms_deliveries').get()).toEqual({ n: 1 });
+
+    const now = new Date('2026-09-21T18:00:00.000Z');
+    expect((await tickTournaments(env, now)).offersQueued).toBe(1);
+    const afterTick = await getTournamentSummary(db, now);
+    const newSeanOffer = afterTick.offers.find((offer) => offer.member_phone === seanPhone)!;
+    expect(newSeanOffer.id).not.toBe(seanId);
+    expect(newSeanOffer).toMatchObject({ board_rank: 9, state: 'ACTIVE' });
+    expect(afterTick.deliveries.filter((delivery) => delivery.offer_id === newSeanOffer.id)).toMatchObject([
+      { recipient: seanPhone, kind: 'TOURNAMENT_INVITE', state: 'QUEUED' },
+    ]);
+    expect(afterTick.offers.some((offer) => offer.member_phone === tylerPhone)).toBe(false);
+    expect(afterTick.offers.some((offer) => offer.member_phone === gleasonPhone)).toBe(false);
+
+    expect((await tickTournaments(env, new Date('2026-09-21T19:00:00.000Z'))).offersQueued).toBe(0);
+    const final = await getTournamentSummary(db, new Date('2026-09-21T19:00:00.000Z'));
+    expect(final.offers.filter((offer) => offer.member_phone === seanPhone)).toHaveLength(1);
+    expect(final.deliveries.filter((delivery) => delivery.offer_id === newSeanOffer.id)).toHaveLength(1);
+  });
+});

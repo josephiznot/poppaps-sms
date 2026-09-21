@@ -110,6 +110,16 @@ the qualification boundary require host choice. Public names are minimized on al
 surfaces, including historical snapshots. Public copy shows qualification cutoff,
 tournament date, points rules, provisional qualification and player actions.
 
+Migration 0011 repairs the exact 2026-Q4 chain created when replacement offers
+committed but their delivery inserts did not. It removes only the three verified
+never-delivered offers and their empty RSVP records, detaches them from the real
+declined source offer, and leaves the active plan unblocked. It creates no offer or
+delivery and sends nothing; the corrected hourly tick atomically starts again with
+the first eligible replacement. Rollout order is deliberate: apply prerequisite
+schema migrations through 0010, deploy and verify the bind-fix revision, confirm no
+scheduled invocation that began before that deployment remains in progress, and
+only then apply 0011.
+
 ## Verification
 
 Use local D1-compatible fixtures and fake Twilio transport only. Cover repeated and
