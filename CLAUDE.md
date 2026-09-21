@@ -26,9 +26,14 @@ persistent intent precedes provider sends; no blind retry
 of uncertain sends. Expired/replaced offers cannot reclaim seats. The system stays
 on Cloudflare/D1/Twilio and is completely separate from Skooped or other projects.
 The public footer credit has been removed. Do not load unrelated business records.
-Apply migrations 0005 through 0010 in order before deploying. Migration 0009 is
-an idempotent record of the already-applied 2026-Q4 deadline correction; 0010
-links the delivered host message to a real offer without resending it. Use Node 24+ for
+Apply prerequisite migrations 0005 through 0010 in order before deploying. Deploy
+and verify the replacement-delivery bind-fix revision, then confirm no scheduled
+invocation that began before that deployment is still in progress before applying
+0011. Migration 0009 is an idempotent record of the already-applied 2026-Q4
+deadline correction; 0010 links the delivered host message to a real offer without
+resending it. Migration 0011 removes the exact three-offer 2026-Q4 replacement
+chain that never produced outbox rows; it queues and sends nothing, leaving a fixed
+hourly tick to restart with the first eligible replacement. Use Node 24+ for
 SQLite tests.
 Result edits preserve season attribution and use atomic, version-guarded replacement.
 Public profile IDs are stored random identifiers; always minimize public names.

@@ -639,10 +639,10 @@ async function refreshAndFillSeats(env: Env, plan: TournamentPlanRow, now: Date)
           plan.schedule_version,
           game.starts_at,
           nowIso,
+          nowIso,
           plan.id,
           token,
           offerId,
-          nowIso,
         ),
     );
   }

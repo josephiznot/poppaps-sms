@@ -87,10 +87,11 @@ After the first deploy:
 
 Text **JOIN** to your number from your phone to test the whole loop.
 
-> **Upgrading an existing deployment?** When the schema changes, apply the new
-> migration to your live DB *before* (re)deploying — migrations are additive and
-> safe to run once (each has its own script; run the ones added since your last
-> deploy):
+> **Upgrading an existing deployment?** Apply prerequisite schema migrations
+> through 0010 to the live DB before deploying. Migration 0011 is the explicit
+> exception: deploy and verify the bind fix first, confirm no older scheduled
+> invocation remains in progress, and only then apply 0011. Each migration has
+> its own script; run the ones added since your last deploy:
 >
 > ```bash
 > npm run db:migrate:remote        # 0001 — recurring games
@@ -104,6 +105,9 @@ Text **JOIN** to your number from your phone to test the whole loop.
 > npm run db:migrate:0009:remote   # 0009 — records the active Q4 9 PM deadline
 > npm run db:migrate:0010:remote   # 0010 — actionable host-player offer policy
 > npm run deploy
+> # Verify /health reports this bind-fix revision and confirm no scheduled
+> # invocation that began before the deploy is still in progress, then:
+> npm run db:migrate:0011:remote   # 0011 — repairs the never-delivered Q4 replacement chain
 > ```
 
 ## Local development
@@ -138,12 +142,13 @@ Real SMS sending still needs valid Twilio creds in `.dev.vars`; everything else
 
 ## Upgrading to automatic tournaments
 
-Read [ADR-0009](docs/adr/0009-automatic-tournaments.md) and [ADR-0010](docs/adr/0010-designated-tournament-dealer.md). Apply migrations **0005 through 0010 in order** before deploying this revision. Do not run the fresh schema against a legacy database as a substitute for migrations.
+Read [ADR-0009](docs/adr/0009-automatic-tournaments.md) and [ADR-0010](docs/adr/0010-designated-tournament-dealer.md). Apply prerequisite migrations **0005 through 0010 in order** before deploying this revision. Deploy and verify the replacement-delivery bind fix before applying repair migration 0011. Do not run the fresh schema against a legacy database as a substitute for migrations.
 
 1. Back up D1 and confirm no duplicate member/game ledger rows or duplicate season-close timestamps. Resolve anomalies explicitly; migrations never delete history to make a constraint pass.
 2. Apply migrations 0005 through 0010 using the matching npm scripts. 0005 preserves existing effective scoring times and creates random public profile IDs; old hashed profile bookmarks no longer resolve. 0007 establishes the seven-day window, 0008 adds the host/dealer role, 0009 records the active Q4 9:00 PM correction, and 0010 links the delivered host message to an actionable offer while updating ranked-seat capacity.
-3. Deploy the checked revision. Existing completed seasons remain historical; past tournaments are never re-invited. Initial automatic planning skips past or less-than-fourteen-day-away quarterly dates.
-4. Verify health and public/admin reads. Let the real cron run; **never send production texts as a smoke test**. Provider acceptance and delivered receipts are displayed separately.
+3. Deploy the checked revision containing the replacement-delivery bind fix. Verify `/health` reports that revision before continuing. Existing completed seasons remain historical; past tournaments are never re-invited. Initial automatic planning skips past or less-than-fourteen-day-away quarterly dates.
+4. Confirm no scheduled Worker invocation that began before the bind-fix deployment is still in progress. Only then apply migration 0011. It removes the exact never-delivered replacement chain so a fixed hourly invocation can restart with the next eligible player; the migration itself queues and sends nothing.
+5. Verify public/admin reads and the repaired database state. Let the real cron run; **never send production texts as a smoke test**. Provider acceptance and delivered receipts are displayed separately.
 
 Local verification: Node 24+, npm ci, npm test, npm run typecheck, and a Wrangler dry-run build. Database tests use real in-memory SQLite and fake Twilio transport. No test credentials or production database are required.
 
