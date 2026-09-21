@@ -56,6 +56,8 @@ export interface TournamentOfferRow {
   replaced_by_offer_id: string | null;
   updated_at: string;
   display_name?: string | null;
+  is_host_offer: number;
+  counts_ranked_seat: number;
 }
 
 export interface TournamentPlanView extends TournamentPlanRow {
@@ -98,8 +100,13 @@ export async function tournamentBoard(db: D1Database, planId: string): Promise<T
 export async function tournamentOffers(db: D1Database, planId: string): Promise<TournamentOfferRow[]> {
   const rows = await db
     .prepare(
-      `SELECT o.*, b.display_name FROM tournament_offers o
+      `SELECT o.*, COALESCE(b.display_name,m.display_name) AS display_name,
+        CASE WHEN h.offer_id IS NULL THEN 0 ELSE 1 END AS is_host_offer,
+        COALESCE(h.counts_ranked_seat,1) AS counts_ranked_seat
+       FROM tournament_offers o
        LEFT JOIN tournament_board b ON b.plan_id=o.plan_id AND b.member_phone=o.member_phone
+       LEFT JOIN members m ON m.phone=o.member_phone
+       LEFT JOIN tournament_host_offers h ON h.offer_id=o.id
        WHERE o.plan_id=? ORDER BY o.board_rank ASC`,
     )
     .bind(planId)
@@ -113,10 +120,13 @@ export async function activeTournamentOfferForPhone(
 ): Promise<(TournamentOfferRow & { plan_status: TournamentPlanStatus; starts_at: string; cancelled: number }) | null> {
   return db
     .prepare(
-      `SELECT o.*, p.status AS plan_status, g.starts_at, g.cancelled
+      `SELECT o.*, p.status AS plan_status, g.starts_at, g.cancelled,
+        CASE WHEN h.offer_id IS NULL THEN 0 ELSE 1 END AS is_host_offer,
+        COALESCE(h.counts_ranked_seat,1) AS counts_ranked_seat
        FROM tournament_offers o
        JOIN tournament_plans p ON p.id=o.plan_id
        JOIN games g ON g.id=p.game_id
+       LEFT JOIN tournament_host_offers h ON h.offer_id=o.id
        WHERE o.member_phone=? AND p.status='ACTIVE' AND g.cancelled=0
          AND o.state IN ('ACTIVE','CONFIRMED','DECLINED')
        ORDER BY p.planned_starts_at ASC LIMIT 1`,

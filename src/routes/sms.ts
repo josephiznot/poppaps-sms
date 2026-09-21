@@ -28,13 +28,14 @@ export const sms = new Hono<{ Bindings: Env }>();
  */
 async function confirmSeat(env: Env, from: string, now: string): Promise<string | null> {
   const member = await db.getMember(env.DB, from);
-  if (member?.status !== 'SUBSCRIBED') return null;
   const automatic = await respondToTournamentOffer(env, from, 'CONFIRM', new Date(now));
   if (automatic.handled) {
+    if (member?.status !== 'SUBSCRIBED') return '';
     return automatic.outcome === 'CONFIRMED'
       ? rsvpConfirmedMessage(env, automatic.game)
       : tournamentOfferExpiredMessage(env);
   }
+  if (member?.status !== 'SUBSCRIBED') return null;
   const rsvp = await db.rsvpForLatestSeason(env.DB, from);
   if (!rsvp) return null;
   const season = await db.latestSeason(env.DB);
@@ -51,13 +52,14 @@ async function confirmSeat(env: Env, from: string, now: string): Promise<string 
  */
 async function declineSeat(env: Env, from: string, now: string): Promise<string | null> {
   const member = await db.getMember(env.DB, from);
-  if (member?.status !== 'SUBSCRIBED') return null;
   const automatic = await respondToTournamentOffer(env, from, 'DECLINE', new Date(now));
   if (automatic.handled) {
+    if (member?.status !== 'SUBSCRIBED') return '';
     return automatic.outcome === 'DECLINED'
       ? rsvpDeclinedMessage(env)
       : tournamentOfferExpiredMessage(env);
   }
+  if (member?.status !== 'SUBSCRIBED') return null;
   const rsvp = await db.rsvpForLatestSeason(env.DB, from);
   if (!rsvp) return null;
   const season = await db.latestSeason(env.DB);
@@ -127,11 +129,11 @@ sms.post('/', async (c) => {
   // both no-op (and fall through) for anyone without a pending invite.
   if (intent === 'CONFIRM' || (intent === 'OPT_IN' && firstWord === 'yes')) {
     const reply = await confirmSeat(c.env, from, now);
-    if (reply) return twiml(reply);
+    if (reply !== null) return reply ? twiml(reply) : twimlEmpty();
   }
   if (intent === 'DECLINE') {
     const reply = await declineSeat(c.env, from, now);
-    if (reply) return twiml(reply);
+    if (reply !== null) return reply ? twiml(reply) : twimlEmpty();
   }
 
   const member = await db.getMember(c.env.DB, from);

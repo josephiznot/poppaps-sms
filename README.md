@@ -101,6 +101,8 @@ Text **JOIN** to your number from your phone to test the whole loop.
 > npm run db:migrate:0006:remote   # 0006 — automatic tournaments and SMS outbox
 > npm run db:migrate:0007:remote   # 0007 — seven-day initial tournament RSVP deadline
 > npm run db:migrate:0008:remote   # 0008 — reusable designated-dealer member role
+> npm run db:migrate:0009:remote   # 0009 — records the active Q4 9 PM deadline
+> npm run db:migrate:0010:remote   # 0010 — actionable host-player offer policy
 > npm run deploy
 > ```
 
@@ -126,20 +128,20 @@ Real SMS sending still needs valid Twilio creds in `.dev.vars`; everything else
 ## Day-to-day
 
 - **Record results** after each game. Choose finishers and attendance. Results save atomically; editing an old game preserves its season. Tournament results award zero season points.
-- **Tournament dates appear automatically**: first off-week Monday each quarter, 6:30 PM Central. Invitations and qualification close are fourteen days before play at 10:00 AM Central. Initial replies are due seven days before play at 10:00 AM; replacements get 24 hours, capped at 24 hours before play.
+- **Tournament dates appear automatically**: first off-week Monday each quarter, 6:30 PM Central. Invitations and qualification close are fourteen days before play at 10:00 AM Central. Initial ranked replies are due at 9:00 PM on the regular-game night seven days before play; replacements get 24 hours, capped at 24 hours before play.
 - **2026 transition**: the next tournament is September 28. Qualification closes September 14, making September 7 the final scoring game of the current season; September 21 begins the next season. Normal quarterly scheduling resumes in 2027.
 - **No routine tournament button.** The hourly job freezes eight qualifiers, closes the scoring season, queues invitations and fills clear-cut vacancies. STOP is authoritative; FOLD declines only the seat. Expired/replaced offers cannot reclaim a seat.
-- **Designated dealer**: after migration 0008, mark the dealer role separately in D1. For player-copy validation, the initial dealer notice exactly matches the qualified-player invite body; it remains a dealer delivery with no offer or ranked seat, so CALL/FOLD has no effect. Later reminders and lifecycle messages remain dealer-specific. Existing logical keys and schedule versions prevent copy changes from resending a current notice. Production role assignment is a separate operation.
+- **Host/dealer player**: the single designated host/dealer always has a real CALL/FOLD-actionable player offer using ordinary invite and reminder copy. The initial field is the ranked top eight, plus the host only when outside that eight. That extra host offer does not consume ranked capacity or join replacement tie groups. SMS opt-out suppresses delivery without retiring the guaranteed offer.
 - **Tournament page**: reschedule when a date conflicts, resolve a final-seat tie, inspect missing results or uncertain delivery. Date changes after invitations notify current invitees once. Cancelled quarterly events are not regenerated.
 - **Roster**: tidy names and mark earned promos redeemed. Public names are always minimized; profile IDs are random.
 - **Returning players**: after STOP, text START or UNSTOP. The saved player name, standings history and profile ID are retained, so onboarding is not repeated.
 
 ## Upgrading to automatic tournaments
 
-Read [ADR-0009](docs/adr/0009-automatic-tournaments.md) and [ADR-0010](docs/adr/0010-designated-tournament-dealer.md). Apply migrations **0005, 0006, 0007, then 0008** before deploying this revision. Do not run the fresh schema against a legacy database as a substitute for migrations.
+Read [ADR-0009](docs/adr/0009-automatic-tournaments.md) and [ADR-0010](docs/adr/0010-designated-tournament-dealer.md). Apply migrations **0005 through 0010 in order** before deploying this revision. Do not run the fresh schema against a legacy database as a substitute for migrations.
 
 1. Back up D1 and confirm no duplicate member/game ledger rows or duplicate season-close timestamps. Resolve anomalies explicitly; migrations never delete history to make a constraint pass.
-2. Apply migrations 0005, 0006, 0007, and 0008 using the matching npm scripts. 0005 preserves existing effective scoring times and creates random public profile IDs; old hashed profile bookmarks no longer resolve. 0007 corrects the already-created 2026-Q4 plan's initial RSVP deadline. 0008 adds the dealer role without assigning it to a member.
+2. Apply migrations 0005 through 0010 using the matching npm scripts. 0005 preserves existing effective scoring times and creates random public profile IDs; old hashed profile bookmarks no longer resolve. 0007 establishes the seven-day window, 0008 adds the host/dealer role, 0009 records the active Q4 9:00 PM correction, and 0010 links the delivered host message to an actionable offer while updating ranked-seat capacity.
 3. Deploy the checked revision. Existing completed seasons remain historical; past tournaments are never re-invited. Initial automatic planning skips past or less-than-fourteen-day-away quarterly dates.
 4. Verify health and public/admin reads. Let the real cron run; **never send production texts as a smoke test**. Provider acceptance and delivered receipts are displayed separately.
 

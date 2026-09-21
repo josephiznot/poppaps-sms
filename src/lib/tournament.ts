@@ -16,8 +16,6 @@ import {
 import { listDeliveries, queueDelivery, type DeliveryRow } from './delivery';
 import {
   automaticTournamentInvite,
-  designatedDealerDateChangedMessage,
-  designatedDealerTournamentCancelledMessage,
   tournamentCancelledMessage,
   tournamentDateChangedMessage,
 } from './messages';
@@ -53,7 +51,6 @@ export interface TournamentTickResult {
   closed: number;
   offersQueued: number;
   completed: number;
-  dealerNoticesQueued: number;
 }
 
 export const quarterKey = (year: number, quarter: number): string => `${year}-Q${quarter}`;
@@ -93,8 +90,15 @@ export function tournamentDeadlines(startsAt: string, timeZone = CHICAGO): {
   const dateKey = localDateInTz(new Date(startsAt), timeZone);
   return {
     qualificationCutoff: zonedToUtcIso(`${addDaysToKey(dateKey, -14)}T10:00`, timeZone),
-    confirmationDeadline: zonedToUtcIso(`${addDaysToKey(dateKey, -7)}T10:00`, timeZone),
+    confirmationDeadline: zonedToUtcIso(`${addDaysToKey(dateKey, -7)}T21:00`, timeZone),
   };
+}
+
+async function designatedHost(env: Env): Promise<{ phone: string; display_name: string | null; status: string } | null> {
+  const rows = await env.DB
+    .prepare("SELECT phone,display_name,status FROM members WHERE is_designated_dealer=1 ORDER BY phone")
+    .all<{ phone: string; display_name: string | null; status: string }>();
+  return rows.results?.length === 1 ? rows.results[0]! : null;
 }
 
 async function createNextPlan(env: Env, now: Date): Promise<number> {
@@ -268,7 +272,7 @@ async function freezeQualification(env: Env, plan: TournamentPlanRow, now: Date)
     .bind(seasonLowerBound, plan.qualification_cutoff)
     .first<{ value: string }>();
   const memberSignature = await env.DB
-    .prepare("SELECT COALESCE(group_concat(signature, '|'), '') AS value FROM (SELECT phone || ':' || status AS signature FROM members ORDER BY phone)")
+    .prepare("SELECT COALESCE(group_concat(signature, '|'), '') AS value FROM (SELECT phone || ':' || status || ':' || is_designated_dealer AS signature FROM members ORDER BY phone)")
     .first<{ value: string }>();
   const missing = await missingResultGames(env, plan, seasonLowerBound);
   if (missing.length) {
@@ -294,7 +298,31 @@ async function freezeQualification(env: Env, plan: TournamentPlanRow, now: Date)
     return false;
   }
 
+  const host = await designatedHost(env);
+  if (!host) {
+    await setQualificationBlock(env.DB, plan, 'Exactly one designated host/dealer is required before qualification can close.', null, nowIso);
+    return false;
+  }
+
   const selectedPhones = new Set(selected.map((r) => r.phone));
+  const initialInvitees = selectedPhones.has(host.phone)
+    ? selected.map((row) => ({ row, isHost: row.phone === host.phone, countsRankedSeat: true }))
+    : [
+      ...selected.map((row) => ({ row, isHost: false, countsRankedSeat: true })),
+      {
+        row: board.find((row) => row.phone === host.phone) ?? {
+          phone: host.phone,
+          display_name: host.display_name,
+          total: 0,
+          last_award: plan.qualification_cutoff,
+          rank: board.length + 1,
+          scoreRank: board.length + 1,
+          subscribed: host.status === 'SUBSCRIBED',
+        },
+        isHost: true,
+        countsRankedSeat: false,
+      },
+    ];
   const seasonId = uid();
   const nextVersion = plan.version + 1;
   const token = uid();
@@ -315,7 +343,13 @@ async function freezeQualification(env: Env, plan: TournamentPlanRow, now: Date)
       optedOut: !r.subscribed,
       selected: selectedPhones.has(r.phone),
     })),
-    invited: selected.map((r) => ({ phone: r.phone, name: r.display_name, optedOut: !r.subscribed })),
+    invited: initialInvitees.map(({ row, isHost, countsRankedSeat }) => ({
+      phone: row.phone,
+      name: row.display_name,
+      optedOut: !row.subscribed,
+      host: isHost,
+      countsRankedSeat,
+    })),
   };
   const statements: D1PreparedStatement[] = [
     env.DB
@@ -329,7 +363,7 @@ async function freezeQualification(env: Env, plan: TournamentPlanRow, now: Date)
              SELECT id || ':' || result_version AS signature FROM games
              WHERE cancelled=0 AND is_tournament=0 AND starts_at>? AND starts_at<? ORDER BY id))
            AND ?=(SELECT COALESCE(group_concat(signature, '|'), '') FROM (
-             SELECT phone || ':' || status AS signature FROM members ORDER BY phone))`,
+             SELECT phone || ':' || status || ':' || is_designated_dealer AS signature FROM members ORDER BY phone))`,
       )
       .bind(
         seasonId, plan.qualification_cutoff, nextVersion, token, nowIso,
@@ -371,9 +405,19 @@ async function freezeQualification(env: Env, plan: TournamentPlanRow, now: Date)
         ),
     );
   }
-  for (const row of selected) {
+  for (const { row, isHost, countsRankedSeat } of initialInvitees) {
     const offerId = uid();
-    const state = row.subscribed ? 'ACTIVE' : 'OPTED_OUT';
+    const state = isHost || row.subscribed ? 'ACTIVE' : 'OPTED_OUT';
+    if (isHost) {
+      statements.push(
+        env.DB
+          .prepare(
+            `INSERT INTO tournament_host_offers (offer_id,plan_id,member_phone,counts_ranked_seat)
+             SELECT ?,?,?,? WHERE EXISTS (SELECT 1 FROM tournament_plans WHERE id=? AND mutation_token=?)`,
+          )
+          .bind(offerId, plan.id, row.phone, countsRankedSeat ? 1 : 0, plan.id, token),
+      );
+    }
     statements.push(
       env.DB
         .prepare(
@@ -390,7 +434,7 @@ async function freezeQualification(env: Env, plan: TournamentPlanRow, now: Date)
           state,
           nowIso,
           plan.confirmation_deadline,
-          row.subscribed ? null : nowIso,
+          state === 'ACTIVE' ? null : nowIso,
           nowIso,
           plan.id,
           token,
@@ -455,7 +499,7 @@ async function refreshAndFillSeats(env: Env, plan: TournamentPlanRow, now: Date)
   for (const offer of firstPass) {
     if (offer.state === 'ACTIVE' || offer.state === 'CONFIRMED') {
       const member = await coreDb.getMember(env.DB, offer.member_phone);
-      if (member?.status !== 'SUBSCRIBED') {
+      if (!offer.is_host_offer && member?.status !== 'SUBSCRIBED') {
         changes.push(
           env.DB
             .prepare(
@@ -464,7 +508,7 @@ async function refreshAndFillSeats(env: Env, plan: TournamentPlanRow, now: Date)
             )
             .bind(nowIso, nowIso, offer.id),
         );
-      } else if (offer.state === 'ACTIVE' && offer.response_deadline <= nowIso) {
+      } else if (!offer.is_host_offer && offer.state === 'ACTIVE' && offer.response_deadline <= nowIso) {
         changes.push(
           env.DB
             .prepare("UPDATE tournament_offers SET state='EXPIRED', retired_at=?, updated_at=? WHERE id=? AND state='ACTIVE'")
@@ -476,14 +520,15 @@ async function refreshAndFillSeats(env: Env, plan: TournamentPlanRow, now: Date)
   if (changes.length) await env.DB.batch(changes);
 
   const offers = await tournamentOffers(env.DB, plan.id);
-  const reserved = offers.filter((o) => o.state === 'ACTIVE' || o.state === 'CONFIRMED').length;
+  const reserved = offers.filter((o) => (o.state === 'ACTIVE' || o.state === 'CONFIRMED') && o.counts_ranked_seat === 1).length;
   let available = SEATS - reserved;
   if (available <= 0 || now.getTime() >= new Date(plan.planned_starts_at).getTime() - DAY_MS) return 0;
 
   const board = await tournamentBoard(env.DB, plan.id);
   const offered = new Set(offers.map((o) => o.member_phone));
   const subscribed = new Set(await coreDb.listSubscribedPhones(env.DB));
-  const eligible = board.filter((row) => !offered.has(row.member_phone) && row.was_subscribed === 1 && subscribed.has(row.member_phone));
+  const host = await designatedHost(env);
+  const eligible = board.filter((row) => row.member_phone !== host?.phone && !offered.has(row.member_phone) && row.was_subscribed === 1 && subscribed.has(row.member_phone));
   if (!eligible.length) return 0;
 
   const chosen: TournamentBoardRow[] = [];
@@ -517,11 +562,11 @@ async function refreshAndFillSeats(env: Env, plan: TournamentPlanRow, now: Date)
   if (!game) return 0;
   const deadline = replacementDeadline(plan, now);
   const sources = offers
-    .filter((o) => !['ACTIVE', 'CONFIRMED'].includes(o.state) && !o.replaced_by_offer_id)
+    .filter((o) => o.counts_ranked_seat === 1 && !['ACTIVE', 'CONFIRMED'].includes(o.state) && !o.replaced_by_offer_id)
     .sort((a, b) => a.board_rank - b.board_rank);
   const offerSignature = offers.map((o) => `${o.id}:${o.state}:${o.replaced_by_offer_id ?? ''}`).sort().join('|');
   const memberSignature = await env.DB
-    .prepare("SELECT COALESCE(group_concat(signature, '|'), '') AS value FROM (SELECT phone || ':' || status AS signature FROM members ORDER BY phone)")
+    .prepare("SELECT COALESCE(group_concat(signature, '|'), '') AS value FROM (SELECT phone || ':' || status || ':' || is_designated_dealer AS signature FROM members ORDER BY phone)")
     .first<{ value: string }>();
   const token = uid();
   const statements: D1PreparedStatement[] = [
@@ -533,7 +578,7 @@ async function refreshAndFillSeats(env: Env, plan: TournamentPlanRow, now: Date)
              SELECT id || ':' || state || ':' || COALESCE(replaced_by_offer_id,'') AS signature
              FROM tournament_offers WHERE plan_id=? ORDER BY id))
            AND ?=(SELECT COALESCE(group_concat(signature, '|'), '') FROM (
-             SELECT phone || ':' || status AS signature FROM members ORDER BY phone))`,
+             SELECT phone || ':' || status || ':' || is_designated_dealer AS signature FROM members ORDER BY phone))`,
       )
       .bind(token, nowIso, plan.id, plan.version, offerSignature, plan.id, memberSignature?.value ?? ''),
   ];
@@ -549,7 +594,8 @@ async function refreshAndFillSeats(env: Env, plan: TournamentPlanRow, now: Date)
            SELECT ?, ?, ?, ?, 'ACTIVE', ?, ?, ?
            WHERE EXISTS (SELECT 1 FROM tournament_plans WHERE id=? AND mutation_token=?)
              AND EXISTS (SELECT 1 FROM members WHERE phone=? AND status='SUBSCRIBED')
-             AND (SELECT COUNT(*) FROM tournament_offers WHERE plan_id=? AND state IN ('ACTIVE','CONFIRMED')) < ?`,
+             AND (SELECT COUNT(*) FROM tournament_offers o WHERE o.plan_id=? AND o.state IN ('ACTIVE','CONFIRMED')
+               AND COALESCE((SELECT h.counts_ranked_seat FROM tournament_host_offers h WHERE h.offer_id=o.id),1)=1) < ?`,
         )
         .bind(
           offerId, plan.id, row.member_phone, row.rank, nowIso, deadline, nowIso,
@@ -612,56 +658,9 @@ async function refreshAndFillSeats(env: Env, plan: TournamentPlanRow, now: Date)
   }
 }
 
-async function ensureDesignatedDealerNotices(env: Env, plan: TournamentPlanRow, now: Date): Promise<number> {
-  const nowIso = now.toISOString();
-  if (plan.planned_starts_at <= nowIso) return 0;
-  const game = await coreDb.getGame(env.DB, plan.game_id);
-  if (!game || game.cancelled) return 0;
-  const dealers = await env.DB
-    .prepare("SELECT phone FROM members WHERE is_designated_dealer=1 AND status='SUBSCRIBED' ORDER BY phone")
-    .all<{ phone: string }>();
-  let queued = 0;
-  for (const dealer of dealers.results ?? []) {
-    const offer = await env.DB
-      .prepare("SELECT id FROM tournament_offers WHERE plan_id=? AND member_phone=? AND state IN ('ACTIVE','CONFIRMED')")
-      .bind(plan.id, dealer.phone)
-      .first<{ id: string }>();
-    if (offer) {
-      await env.DB
-        .prepare(
-          `UPDATE sms_deliveries SET state='SUPPRESSED', retryable=0,
-           last_error='Dealer has a current player offer', updated_at=?
-           WHERE plan_id=? AND recipient=? AND kind LIKE 'DEALER_%'
-             AND state IN ('QUEUED','FAILED')`,
-        )
-        .bind(nowIso, plan.id, dealer.phone)
-        .run();
-      continue;
-    }
-    const logicalKey = `tournament:${plan.id}:dealer-notice:v${plan.schedule_version}`;
-    const existing = await env.DB
-      .prepare('SELECT id FROM sms_deliveries WHERE logical_key=? AND recipient=?')
-      .bind(logicalKey, dealer.phone)
-      .first<{ id: string }>();
-    await queueDelivery(env.DB, {
-      logicalKey,
-      recipient: dealer.phone,
-      kind: 'DEALER_TOURNAMENT_NOTICE',
-      body: automaticTournamentInvite(env, game, plan.confirmation_deadline),
-      now: nowIso,
-      planId: plan.id,
-      gameId: plan.game_id,
-      version: plan.schedule_version,
-      expiresAt: plan.planned_starts_at,
-    });
-    if (!existing) queued++;
-  }
-  return queued;
-}
-
 export async function tickTournaments(env: Env, now = new Date()): Promise<TournamentTickResult> {
   const result: TournamentTickResult = {
-    created: await createNextPlan(env, now), closed: 0, offersQueued: 0, completed: 0, dealerNoticesQueued: 0,
+    created: await createNextPlan(env, now), closed: 0, offersQueued: 0, completed: 0,
   };
   const plans = await listTournamentPlanRows(env.DB);
   for (const plan of plans) {
@@ -674,10 +673,6 @@ export async function tickTournaments(env: Env, now = new Date()): Promise<Tourn
     if (!current) continue;
     if (current.status === 'ACTIVE') {
       result.offersQueued += await refreshAndFillSeats(env, current, now);
-      const refreshed = await getTournamentPlan(env.DB, current.id);
-      if (refreshed?.status === 'ACTIVE') {
-        result.dealerNoticesQueued += await ensureDesignatedDealerNotices(env, refreshed, now);
-      }
     }
     if (current.status === 'ACTIVE' && current.planned_starts_at <= now.toISOString()) {
       const recorded = await env.DB
@@ -727,12 +722,13 @@ async function addReplacementOffers(
 ): Promise<void> {
   const board = await tournamentBoard(env.DB, plan.id);
   const offers = await tournamentOffers(env.DB, plan.id);
-  const reserved = offers.filter((o) => o.state === 'ACTIVE' || o.state === 'CONFIRMED').length;
+  const reserved = offers.filter((o) => (o.state === 'ACTIVE' || o.state === 'CONFIRMED') && o.counts_ranked_seat === 1).length;
   const available = SEATS - reserved;
   if (selectedPhones.length !== available || new Set(selectedPhones).size !== selectedPhones.length) {
     throw new Error(`Select exactly ${available} tied replacement candidate${available === 1 ? '' : 's'}.`);
   }
-  const tied = board.filter((b) => b.points === plan.tie_score && !offers.some((o) => o.member_phone === b.member_phone));
+  const host = await designatedHost(env);
+  const tied = board.filter((b) => b.member_phone !== host?.phone && b.points === plan.tie_score && !offers.some((o) => o.member_phone === b.member_phone));
   if (selectedPhones.some((phone) => !tied.some((b) => b.member_phone === phone))) throw new Error('Selection must come from the blocked tie group.');
   const subscribed = new Set(await coreDb.listSubscribedPhones(env.DB));
   if (selectedPhones.some((phone) => !subscribed.has(phone))) throw new Error('A selected replacement is no longer subscribed.');
@@ -743,7 +739,7 @@ async function addReplacementOffers(
   const nowIso = now.toISOString();
   const token = uid();
   const nextVersion = expectedVersion + 1;
-  const sources = offers.filter((o) => !['ACTIVE', 'CONFIRMED'].includes(o.state) && !o.replaced_by_offer_id);
+  const sources = offers.filter((o) => o.counts_ranked_seat === 1 && !['ACTIVE', 'CONFIRMED'].includes(o.state) && !o.replaced_by_offer_id);
   const offerSignature = offers.map((o) => `${o.id}:${o.state}:${o.replaced_by_offer_id ?? ''}`).sort().join('|');
   const statements: D1PreparedStatement[] = [
     env.DB
@@ -768,7 +764,8 @@ async function addReplacementOffers(
            SELECT ?, ?, ?, ?, 'ACTIVE', ?, ?, ?
            WHERE EXISTS (SELECT 1 FROM tournament_plans WHERE id=? AND mutation_token=?)
              AND EXISTS (SELECT 1 FROM members WHERE phone=? AND status='SUBSCRIBED')
-             AND (SELECT COUNT(*) FROM tournament_offers WHERE plan_id=? AND state IN ('ACTIVE','CONFIRMED')) < ?`,
+             AND (SELECT COUNT(*) FROM tournament_offers o WHERE o.plan_id=? AND o.state IN ('ACTIVE','CONFIRMED')
+               AND COALESCE((SELECT h.counts_ranked_seat FROM tournament_host_offers h WHERE h.offer_id=o.id),1)=1) < ?`,
         )
         .bind(offerId, plan.id, phone, row.rank, nowIso, deadline, nowIso, plan.id, token, phone, plan.id, SEATS),
     );
@@ -888,12 +885,6 @@ export async function rescheduleTournament(
   const priorDeliveries = plan.season_id ? await listDeliveries(env.DB, plan.id) : [];
   const recipients = [...new Set(offers.filter((o) => o.state === 'ACTIVE' || o.state === 'CONFIRMED').map((o) => o.member_phone))];
   const subscribed = new Set(await coreDb.listSubscribedPhones(env.DB));
-  const dealers = plan.season_id
-    ? (await env.DB
-      .prepare("SELECT phone FROM members WHERE is_designated_dealer=1 AND status='SUBSCRIBED' ORDER BY phone")
-      .all<{ phone: string }>()).results ?? []
-    : [];
-  const currentPlayerPhones = new Set(recipients);
   const offerSignature = offers.map((o) => `${o.id}:${o.state}:${o.replaced_by_offer_id ?? ''}`).sort().join('|');
   const qualificationCutoff = plan.season_id ? plan.qualification_cutoff : deadlines.qualificationCutoff;
   const statements: D1PreparedStatement[] = [
@@ -942,7 +933,9 @@ export async function rescheduleTournament(
     for (const phone of recipients.filter((p) => subscribed.has(p))) {
       const offer = offers.find((o) => o.member_phone === phone)!;
       const notified = priorDeliveries.some(
-        (d) => d.offer_id === offer.id && d.kind === 'TOURNAMENT_INVITE' && ['SENDING', 'ACCEPTED', 'DELIVERED', 'UNKNOWN'].includes(d.state),
+        (d) => d.offer_id === offer.id
+          && ['TOURNAMENT_INVITE', 'DEALER_TOURNAMENT_NOTICE'].includes(d.kind)
+          && ['SENDING', 'ACCEPTED', 'DELIVERED', 'UNKNOWN'].includes(d.state),
       );
       const kind = notified ? 'TOURNAMENT_DATE_CHANGE' : 'TOURNAMENT_INVITE';
       const body = notified
@@ -961,29 +954,6 @@ export async function rescheduleTournament(
             phone, kind, body, nextScheduleVersion, startsAt, nowIso, nowIso,
             plan.id, token,
           ),
-      );
-    }
-    for (const dealer of dealers.filter((d) => !currentPlayerPhones.has(d.phone))) {
-      const notified = priorDeliveries.some(
-        (d) => d.recipient === dealer.phone
-          && ['DEALER_TOURNAMENT_NOTICE', 'DEALER_TOURNAMENT_DATE_CHANGE'].includes(d.kind)
-          && ['SENDING', 'ACCEPTED', 'DELIVERED', 'UNKNOWN'].includes(d.state),
-      );
-      const kind = notified ? 'DEALER_TOURNAMENT_DATE_CHANGE' : 'DEALER_TOURNAMENT_NOTICE';
-      const keyPart = notified ? 'dealer-date-change' : 'dealer-notice';
-      const body = notified
-        ? designatedDealerDateChangedMessage(env, updatedGame, activeDeadline, now)
-        : automaticTournamentInvite(env, updatedGame, activeDeadline);
-      statements.push(
-        env.DB.prepare(
-          `INSERT OR IGNORE INTO sms_deliveries
-           (id, logical_key, plan_id, game_id, recipient, kind, body, version, state, expires_at, created_at, updated_at)
-           SELECT ?, ?, ?, ?, ?, ?, ?, ?, 'QUEUED', ?, ?, ?
-           WHERE EXISTS (SELECT 1 FROM tournament_plans WHERE id=? AND mutation_token=?)`,
-        ).bind(
-          uid(), `tournament:${plan.id}:${keyPart}:v${nextScheduleVersion}`, plan.id, plan.game_id,
-          dealer.phone, kind, body, nextScheduleVersion, startsAt, nowIso, nowIso, plan.id, token,
-        ),
       );
     }
   }
@@ -1014,18 +984,13 @@ export async function cancelTournament(
     offers
       .filter((o) => o.state === 'ACTIVE' || o.state === 'CONFIRMED')
       .filter((o) => priorDeliveries.some(
-        (d) => d.offer_id === o.id && d.kind === 'TOURNAMENT_INVITE' && ['SENDING', 'ACCEPTED', 'DELIVERED', 'UNKNOWN'].includes(d.state),
+        (d) => d.offer_id === o.id
+          && ['TOURNAMENT_INVITE', 'DEALER_TOURNAMENT_NOTICE'].includes(d.kind)
+          && ['SENDING', 'ACCEPTED', 'DELIVERED', 'UNKNOWN'].includes(d.state),
       ))
       .map((o) => o.member_phone),
   )];
   const subscribed = new Set(await coreDb.listSubscribedPhones(env.DB));
-  const playerRecipientSet = new Set(recipients);
-  const dealerRecipients = [...new Set(
-    priorDeliveries
-      .filter((d) => ['DEALER_TOURNAMENT_NOTICE', 'DEALER_TOURNAMENT_DATE_CHANGE'].includes(d.kind))
-      .filter((d) => ['SENDING', 'ACCEPTED', 'DELIVERED', 'UNKNOWN'].includes(d.state))
-      .map((d) => d.recipient),
-  )].filter((phone) => !playerRecipientSet.has(phone));
   const offerSignature = offers.map((o) => `${o.id}:${o.state}:${o.replaced_by_offer_id ?? ''}`).sort().join('|');
   const statements: D1PreparedStatement[] = [
     env.DB
@@ -1074,19 +1039,6 @@ export async function cancelTournament(
         ),
     );
   }
-  for (const phone of dealerRecipients.filter((p) => subscribed.has(p))) {
-    statements.push(
-      env.DB.prepare(
-        `INSERT OR IGNORE INTO sms_deliveries
-         (id, logical_key, plan_id, game_id, recipient, kind, body, version, state, created_at, updated_at)
-         SELECT ?, ?, ?, ?, ?, 'DEALER_TOURNAMENT_CANCELLED', ?, ?, 'QUEUED', ?, ?
-         WHERE EXISTS (SELECT 1 FROM tournament_plans WHERE id=? AND mutation_token=?)`,
-      ).bind(
-        uid(), `tournament:${plan.id}:dealer-cancelled`, plan.id, plan.game_id, phone,
-        designatedDealerTournamentCancelledMessage(env), nextScheduleVersion, nowIso, nowIso, plan.id, token,
-      ),
-    );
-  }
   await env.DB.batch(statements);
   const updated = await getTournamentPlan(env.DB, plan.id);
   if (updated?.mutation_token !== token) throw new Error('Tournament changed while cancelling. Refresh and try again.');
@@ -1102,8 +1054,8 @@ export async function respondToTournamentOffer(
   now = new Date(),
 ): Promise<TournamentResponse> {
   const member = await coreDb.getMember(env.DB, phone);
-  if (member?.status !== 'SUBSCRIBED') return { handled: false, game: null };
   const offer = await activeTournamentOfferForPhone(env.DB, phone);
+  if (member?.status !== 'SUBSCRIBED' && !offer?.is_host_offer) return { handled: false, game: null };
   if (!offer) {
     const historic = await env.DB
       .prepare(
@@ -1135,7 +1087,7 @@ export async function respondToTournamentOffer(
     return { handled: true, outcome: 'DECLINED', game };
   }
 
-  if (offer.response_deadline <= nowIso || offer.replaced_by_offer_id || !['ACTIVE', 'CONFIRMED', 'DECLINED'].includes(offer.state)) {
+  if ((!offer.is_host_offer && offer.response_deadline <= nowIso) || offer.replaced_by_offer_id || !['ACTIVE', 'CONFIRMED', 'DECLINED'].includes(offer.state)) {
     return { handled: true, outcome: 'EXPIRED', game };
   }
   const updated = await env.DB
@@ -1146,7 +1098,9 @@ export async function respondToTournamentOffer(
          AND state IN ('ACTIVE','CONFIRMED','DECLINED')
          AND (state IN ('ACTIVE','CONFIRMED') OR
            (state='DECLINED' AND
-            (SELECT COUNT(*) FROM tournament_offers WHERE plan_id=? AND state IN ('ACTIVE','CONFIRMED')) < ?))`,
+            (COALESCE((SELECT counts_ranked_seat FROM tournament_host_offers WHERE offer_id=tournament_offers.id),1)=0 OR
+             (SELECT COUNT(*) FROM tournament_offers o WHERE o.plan_id=? AND o.state IN ('ACTIVE','CONFIRMED')
+               AND COALESCE((SELECT h.counts_ranked_seat FROM tournament_host_offers h WHERE h.offer_id=o.id),1)=1) < ?)))`,
     )
     .bind(nowIso, nowIso, offer.id, offer.plan_id, SEATS)
     .run();

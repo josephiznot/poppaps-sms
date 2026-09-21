@@ -21,7 +21,7 @@ Consequences,** and a **"Revisit if / Future revisions"** section.
 | [0007](0007-tournament-placements.md) | Record tournament placements with zero points | Accepted (implemented) |
 | [0008](0008-public-tournament-visibility.md) | Upcoming tournament shown as an invite-only notice, never as "next game" | Accepted (implemented) |
 | [0009](0009-automatic-tournaments.md) | Automatic quarterly tournament operations | Accepted (implemented) |
-| [0010](0010-designated-tournament-dealer.md) | Designated tournament dealer notifications | Accepted (implemented) |
+| [0010](0010-designated-tournament-dealer.md) | Designated host/dealer is a tournament player | Accepted (implemented) |
 
 ## Context at a glance
 

@@ -12,7 +12,8 @@ function fixture(){
   sqlite.exec(`INSERT INTO games(id,starts_at,location,created_at,results_recorded_at) VALUES('qualifying','2026-09-07T23:30:00.000Z','Lounge','2026-09-01','2026-09-08');`);
   for(let i=0;i<10;i++){
     const phone=`+15555550${String(i).padStart(3,'0')}`;
-    sqlite.prepare('INSERT INTO members(phone,display_name,created_at,updated_at) VALUES(?,?,?,?)').run(phone,`Player${i} Test`,'2026-01-01','2026-01-01');
+    sqlite.prepare('INSERT INTO members(phone,display_name,created_at,updated_at,is_designated_dealer) VALUES(?,?,?,?,?)')
+      .run(phone,`Player${i} Test`,'2026-01-01','2026-01-01',i===0?1:0);
     sqlite.prepare('INSERT INTO points_ledger(id,member_phone,game_id,points,place,awarded_at) VALUES(?,?,?,?,?,?)').run(`p${i}`,phone,'qualifying',10-i,1,'2026-09-07T23:30:00.000Z');
   }
   sqlite.exec(`INSERT INTO games(id,starts_at,location,created_at,results_recorded_at) VALUES('next-season','2026-09-21T23:30:00.000Z','Lounge','2026-09-01','2026-09-22');
@@ -161,7 +162,7 @@ describe('automatic tournament integrated workflow',()=>{
     const initial=(await listTournamentPlans(db))[0]!;
     expect(initial.planned_starts_at).toBe('2026-09-28T23:30:00.000Z');
     expect(initial.qualification_cutoff).toBe('2026-09-14T15:00:00.000Z');
-    expect(initial.confirmation_deadline).toBe('2026-09-21T15:00:00.000Z');
+    expect(initial.confirmation_deadline).toBe('2026-09-22T02:00:00.000Z');
     await tickTournaments(env,new Date('2026-09-14T15:01:00.000Z'));
     await tickTournaments(env,new Date('2026-09-14T15:02:00.000Z'));
     expect(sqlite.prepare('SELECT COUNT(*) AS n FROM seasons').get()?.n).toBe(1);
@@ -180,28 +181,28 @@ describe('automatic tournament integrated workflow',()=>{
     expect(offers.find(o=>o.id===first.id)?.state).toBe('REPLACED');
     expect((await respondToTournamentOffer(env,first.member_phone,'CONFIRM',new Date('2026-09-15T17:00:00.000Z'))).outcome).not.toBe('CONFIRMED');
   });
-  it('expires initial offers at the seven-day deadline and backfills clear vacancies on that tick',async()=>{
+  it('expires ordinary initial offers at the 9 PM cutoff while the host offer survives',async()=>{
     const {db,env}=fixture();
     await tickTournaments(env,new Date('2026-09-13T18:00:00.000Z'));
     await tickTournaments(env,new Date('2026-09-14T15:00:00.000Z'));
     const plan=(await listTournamentPlans(db))[0]!;
     let offers=await tournamentOffers(db,plan.id);
     expect(offers.filter(o=>o.state==='ACTIVE')).toHaveLength(8);
-    expect(new Set(offers.map(o=>o.response_deadline))).toEqual(new Set(['2026-09-21T15:00:00.000Z']));
+    expect(new Set(offers.map(o=>o.response_deadline))).toEqual(new Set(['2026-09-22T02:00:00.000Z']));
 
-    await tickTournaments(env,new Date('2026-09-21T14:59:59.999Z'));
+    await tickTournaments(env,new Date('2026-09-22T01:59:59.999Z'));
     expect((await tournamentOffers(db,plan.id)).filter(o=>o.state==='ACTIVE')).toHaveLength(8);
 
-    const tick=await tickTournaments(env,new Date('2026-09-21T15:00:00.000Z'));
+    const tick=await tickTournaments(env,new Date('2026-09-22T02:00:00.000Z'));
     offers=await tournamentOffers(db,plan.id);
     expect(tick.offersQueued).toBe(2);
-    expect(offers.filter(o=>o.state==='ACTIVE').map(o=>o.board_rank)).toEqual([9,10]);
-    expect(offers.filter(o=>o.state==='ACTIVE').map(o=>o.response_deadline)).toEqual([
-      '2026-09-22T15:00:00.000Z',
-      '2026-09-22T15:00:00.000Z',
+    expect(offers.filter(o=>o.state==='ACTIVE').map(o=>o.board_rank)).toEqual([1,9,10]);
+    expect(offers.filter(o=>o.state==='ACTIVE' && !o.is_host_offer).map(o=>o.response_deadline)).toEqual([
+      '2026-09-23T02:00:00.000Z',
+      '2026-09-23T02:00:00.000Z',
     ]);
     expect(offers.filter(o=>o.state==='REPLACED')).toHaveLength(2);
-    expect(offers.filter(o=>o.state==='EXPIRED')).toHaveLength(6);
+    expect(offers.filter(o=>o.state==='EXPIRED')).toHaveLength(5);
   });
   it('rescheduling before invitations preserves the quarterly plan and rejects replay',async()=>{
     const {db,env}=fixture();

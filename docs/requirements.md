@@ -5,7 +5,7 @@
 > backfill and unrestricted RSVP-reclaim wording below. Tournaments auto-schedule
 > on the first off-week Monday each quarter. Qualification closes and invitation
 > work is persisted fourteen days before play, with the initial response deadline
-> seven days before play at 10:00 Central. The host records results and handles
+> on the regular-game night seven days before play at 21:00 Central. The host records results and handles
 > only date conflicts, missing
 > results, cutoff ties and uncertain delivery. Clear vacancies are filled in frozen
 > board order automatically; replaced/expired invitations cannot reclaim seats.
@@ -13,14 +13,14 @@
 > commit atomically before provider dispatch. Delivery acceptance and receipt are
 > tracked separately. Public scoring, season timing, qualification and player-action
 > guidance must match this policy. This project has no connection to other businesses.
-> A subscribed designated dealer receives the exact initial qualified-player invite
-> body for copy validation, followed by dealer-specific lifecycle messages, without
-> consuming a ranked seat or gaining a CALL/FOLD-actionable offer (ADR-0010).
-> For the already-active 2026-Q4 tournament only, the host extended the remaining
+> The single designated host/dealer always receives a CALL/FOLD-actionable ordinary
+> player offer. The ranked top eight are invited, plus the host only when outside
+> that selected eight; the extra host offer consumes no ranked seat (ADR-0010).
+> For the already-active 2026-Q4 tournament, the host extended the remaining
 > active initial offers on September 21 from 10:00 AM to 9:00 PM Central. This did
 > not reopen confirmed or retired offers, rewrite delivered texts or the frozen
 > season snapshot, or change the schedule version. Later tournaments keep the
-> ordinary seven-day/10:00 AM deadline.
+> recurring seven-day/9:00 PM deadline.
 
 - **Status:** Consolidated draft for build (supersedes the 2026-06-08 hashing draft)
 - **Date:** 2026-06-08
@@ -127,27 +127,24 @@ regress.
 
 ### 2.4 Special Players tournament (ADR-0009)
 - FR-T1. Automatic quarterly scheduling: first Monday on the regular cadence's off week at 18:30 America/Chicago. The one-time 2026-Q4 transition is September 28, with September 7 as the last scoring game; the normal rule resumes in 2027. Only the next future occurrence is materialized. Host overrides and cancellations persist.
-- FR-T2. At 10:00 Central fourteen calendar days before play, validate qualification and atomically persist the season boundary, complete ranked board, selected eight qualifiers, seat offers and unique outbound intent. Only then dispatch invitations. Initial invitees have exactly seven calendar days to respond, until 10:00 Central seven days before play. No routine host approval is required. The one-time 2026-Q4 exception extended only still-active initial offers on September 21 to 9:00 PM Central; it did not change the recurring policy.
+- FR-T2. At 10:00 Central fourteen calendar days before play, validate qualification and atomically persist the season boundary, complete ranked board, selected eight qualifiers, seat offers and unique outbound intent. Only then dispatch invitations. Initial ranked invitees respond by 21:00 Central on the regular-game night seven calendar days before play. No routine host approval is required. The already-active 2026-Q4 plan was corrected to this same 9:00 PM deadline without rewriting delivered messages or changing its schedule version.
 - FR-T3. Season reset is a recorded boundary, never deletion. Complete frozen standings preserve replacement order after later result corrections. Edits cannot move a game to a new season.
 - FR-T4. Missing regular-game results, fewer than eight scoring players, and equal-point ties across the eighth seat block automatic invitations. The host selects only from the unresolved tied group; higher scoring players retain their places.
 - FR-T5. Tournament placements are recorded with zero points. Zero-point rows cannot affect scoring tie-breaks. Tied first-place finishers are co-winners in public summaries.
 - FR-T6. Invitations stay framed as game-night reminders for an invitation-only cigar-prize event; no cash or money wagering. The stored date and response deadline appear in the text.
-- FR-T7. Opted-out qualifiers retain their historical earned place and receive no SMS. Every dispatch rechecks subscription. Eligible replacements follow the frozen board; unresolved replacement ties require host choice.
-- FR-T8. CALL confirms an active offer; FOLD declines while preserving reminder subscription. STOP and HELP remain authoritative. Pending offers expire at their stored deadline. Replaced, expired, cancelled and completed-event offers cannot reclaim seats or promise attendance.
-- FR-T9. Clear vacancies are filled automatically until twenty-four hours before play. Replacement offers expire twenty-four hours after they are made, capped at twenty-four hours before play. At most eight active/confirmed offers may reserve seats. Current offers receive reminders; declined, replaced and opted-out players do not.
-- FR-T10. Per-recipient durable delivery state distinguishes queued, accepted, delivered, failed and unknown. Uncertain transport is never automatically resent. Repeated cron ticks, form submissions and callbacks do not duplicate logical work. A signed provider-standard START or UNSTOP, with or without OptOutType, may return the sender's definite no-SID 21610 tournament-invite failure to the hourly outbox only while its linked offer and plan remain active, its response deadline and delivery remain unexpired, and its linked game remains future and uncancelled. ADR-0010 extends this only to a still-current designated-dealer notice whose player invitation window remains open. Other opt-in words, delivery kinds and states are never recovered by this path.
+- FR-T7. Opted-out qualifiers retain their historical earned place and receive no SMS. Every dispatch rechecks subscription. Eligible replacements follow the frozen board; unresolved replacement ties require host choice. The separately offered host is excluded from lower-ranked replacement groups.
+- FR-T8. CALL confirms an active offer; FOLD declines while preserving reminder subscription. STOP and HELP remain authoritative. Ordinary pending offers expire at their stored deadline. The host offer survives that cutoff and SMS opt-out, but FOLD may decline it. Replaced, expired, cancelled and completed-event offers cannot reclaim seats or promise attendance.
+- FR-T9. Clear ranked-seat vacancies are filled automatically until twenty-four hours before play. Replacement offers expire twenty-four hours after they are made, capped at twenty-four hours before play. At most eight active/confirmed offers reserve ranked seats; an outside-top-eight host offer is additional. Current subscribed offers receive reminders; declined, replaced and opted-out players do not receive SMS. During the reminder window, every tick reconciles the unique reminder intent per current subscribed offer even after the game-level batch ran, allowing consent restored before play to queue one missing reminder without duplicating earlier recipients.
+- FR-T10. Per-recipient durable delivery state distinguishes queued, accepted, delivered, failed and unknown. Uncertain transport is never automatically resent. Repeated cron ticks, form submissions and callbacks do not duplicate logical work. A signed provider-standard START or UNSTOP, with or without OptOutType, may return the sender's definite no-SID 21610 tournament-invite failure to the hourly outbox only while its linked offer and plan remain active, its delivery remains unexpired, and its linked game remains future and uncancelled. Ordinary offers must also remain before their response deadline; host offers are deadline-exempt. Other opt-in words, delivery kinds and states are never recovered by this path.
 - FR-T11. Rescheduling preserves the plan/game and any closed season, rejects conflicts, updates deadlines and sends one versioned notice to current invitees. Cancellation retires offers, suppresses stale work and does not regenerate that quarter.
-- FR-T12. A reusable member role marks designated tournament dealers. Each subscribed
-  dealer receives one schedule-versioned ACTIVE-tournament notice whose body is
-  byte-for-byte `automaticTournamentInvite` for an initially qualified player, plus
-  a dealer-specific night-before reminder. The notice keeps its dealer delivery kind,
-  creates no offer, consumes no ranked seat, and gives CALL/FOLD no effect. Copy-only
-  code changes retain the logical key and schedule version and cannot resend an
-  existing notice. An ACTIVE or CONFIRMED player offer takes precedence over dealer messaging.
-  Reschedules and cancellations notify a previously notified dealer once; STOP wins.
-  The dealer notice and its narrow definite no-SID 21610 START/UNSTOP recovery remain
-  valid until the ACTIVE, uncancelled tournament starts, independent of the player
-  response deadline.
+- FR-T12. A reusable member role identifies the single designated host/dealer. The
+  host is always a tournament player and receives the byte-for-byte ordinary initial
+  player invitation. If selected in the ranked top eight, the host's offer is one of
+  those eight; otherwise it is a ninth offer that consumes no ranked seat. There is no
+  separate dealer notice, reminder or lifecycle path. CALL/FOLD, date changes,
+  cancellation and player reminders use the ordinary offer path. The host offer does
+  not expire at the initial response cutoff and is not retired by SMS opt-out; dispatch
+  still requires current subscription, and explicit FOLD may decline the offer.
 
 ### 2.5 Attendance & rewards
 - FR-W1. **Attendance is host-marked** on the post-game screen (tap who attended),
