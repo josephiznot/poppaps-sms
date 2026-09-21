@@ -87,6 +87,74 @@ describe('automatic tournament integrated workflow',()=>{
     expect(sqlite.prepare('SELECT response_deadline FROM tournament_offers WHERE id=?').get('initial')?.response_deadline)
       .toBe('2026-09-26T23:00:00.000Z');
   });
+  it('records the one-time Q4 extension without reopening confirmed or retired offers',()=>{
+    const {sqlite}=createTestDb(false);
+    sqlite.exec(`INSERT INTO games(id,starts_at,location,is_tournament,cancelled,created_at)
+      VALUES
+        ('tournament','2026-09-28T23:30:00.000Z','Lounge',1,0,'2026-09-13T00:00:00.000Z'),
+        ('other-game','2026-09-28T23:30:00.000Z','Lounge',1,0,'2026-09-13T00:00:00.000Z');
+      INSERT INTO tournament_plans(
+        id,quarter_key,game_id,status,planned_starts_at,qualification_cutoff,
+        confirmation_deadline,season_id,version,schedule_version,created_at,updated_at
+      ) VALUES
+        ('plan','2026-Q4','tournament','ACTIVE','2026-09-28T23:30:00.000Z',
+         '2026-09-14T15:00:00.000Z','2026-09-21T15:00:00.000Z','season',4,1,
+         '2026-09-14T15:00:00.000Z','2026-09-14T15:00:00.000Z'),
+        ('other-plan','2027-Q1','other-game','ACTIVE','2026-09-28T23:30:00.000Z',
+         '2026-09-14T15:00:00.000Z','2026-09-21T15:00:00.000Z','other-season',4,1,
+         '2026-09-14T15:00:00.000Z','2026-09-14T15:00:00.000Z');
+      INSERT INTO tournament_board(
+        plan_id,member_phone,rank,score_rank,points,scoring_tiebreak_at,was_subscribed,selected_qualifier
+      ) VALUES
+        ('plan','+15550000001',1,1,10,'2026-09-07T23:30:00.000Z',1,1),
+        ('plan','+15550000002',2,2,9,'2026-09-07T23:30:00.000Z',1,1),
+        ('plan','+15550000003',3,3,8,'2026-09-07T23:30:00.000Z',1,1),
+        ('plan','+15550000004',4,4,7,'2026-09-07T23:30:00.000Z',1,1),
+        ('plan','+15550000009',9,9,2,'2026-09-07T23:30:00.000Z',1,0),
+        ('other-plan','+15550000010',1,1,10,'2026-09-07T23:30:00.000Z',1,1);
+      INSERT INTO tournament_offers(
+        id,plan_id,member_phone,board_rank,state,offered_at,response_deadline,replaced_by_offer_id,updated_at
+      ) VALUES
+        ('active','plan','+15550000001',1,'ACTIVE','2026-09-14T15:00:00.000Z','2026-09-21T15:00:00.000Z',NULL,'2026-09-14T15:00:00.000Z'),
+        ('confirmed','plan','+15550000002',2,'CONFIRMED','2026-09-14T15:00:00.000Z','2026-09-21T15:00:00.000Z',NULL,'2026-09-14T15:00:00.000Z'),
+        ('replaced','plan','+15550000003',3,'REPLACED','2026-09-14T15:00:00.000Z','2026-09-21T15:00:00.000Z','active','2026-09-15T15:00:00.000Z'),
+        ('expired','plan','+15550000004',4,'EXPIRED','2026-09-14T15:00:00.000Z','2026-09-21T15:00:00.000Z',NULL,'2026-09-21T15:00:00.000Z'),
+        ('replacement','plan','+15550000009',9,'ACTIVE','2026-09-20T15:00:00.000Z','2026-09-21T15:00:00.000Z',NULL,'2026-09-20T15:00:00.000Z'),
+        ('other-offer','other-plan','+15550000010',1,'ACTIVE','2026-09-14T15:00:00.000Z','2026-09-21T15:00:00.000Z',NULL,'2026-09-14T15:00:00.000Z');
+      INSERT INTO sms_deliveries(
+        id,logical_key,plan_id,game_id,offer_id,recipient,kind,body,state,expires_at,created_at,updated_at
+      ) VALUES(
+        'delivery','initial','plan','tournament','active','+15550000001','TOURNAMENT_INVITE',
+        'Reply CALL by Mon, Sep 21, 10:00 AM CDT','DELIVERED','2026-09-28T23:30:00.000Z',
+        '2026-09-14T15:00:00.000Z','2026-09-14T15:00:00.000Z'
+      );`);
+    const migration=readFileSync(resolve('migrations/0009_q4_deadline_extension.sql'),'utf8');
+    sqlite.exec(migration);
+    sqlite.exec(migration);
+    expect(sqlite.prepare('SELECT confirmation_deadline,version,schedule_version FROM tournament_plans WHERE id=?').get('plan')).toEqual({
+      confirmation_deadline:'2026-09-22T02:00:00.000Z',
+      version:5,
+      schedule_version:1,
+    });
+    expect(sqlite.prepare('SELECT id,state,response_deadline FROM tournament_offers WHERE plan_id=? ORDER BY id').all('plan')).toEqual([
+      {id:'active',state:'ACTIVE',response_deadline:'2026-09-22T02:00:00.000Z'},
+      {id:'confirmed',state:'CONFIRMED',response_deadline:'2026-09-21T15:00:00.000Z'},
+      {id:'expired',state:'EXPIRED',response_deadline:'2026-09-21T15:00:00.000Z'},
+      {id:'replaced',state:'REPLACED',response_deadline:'2026-09-21T15:00:00.000Z'},
+      {id:'replacement',state:'ACTIVE',response_deadline:'2026-09-21T15:00:00.000Z'},
+    ]);
+    expect(sqlite.prepare('SELECT confirmation_deadline,version FROM tournament_plans WHERE id=?').get('other-plan')).toEqual({
+      confirmation_deadline:'2026-09-21T15:00:00.000Z',
+      version:4,
+    });
+    expect(sqlite.prepare('SELECT response_deadline FROM tournament_offers WHERE id=?').get('other-offer')?.response_deadline)
+      .toBe('2026-09-21T15:00:00.000Z');
+    expect(sqlite.prepare('SELECT body,state,expires_at FROM sms_deliveries WHERE id=?').get('delivery')).toEqual({
+      body:'Reply CALL by Mon, Sep 21, 10:00 AM CDT',
+      state:'DELIVERED',
+      expires_at:'2026-09-28T23:30:00.000Z',
+    });
+  });
   it('uses September 7 as the transition cutoff, closes once, and safely replaces a decline',async()=>{
     const {db,sqlite,env}=fixture();
     await tickTournaments(env,new Date('2026-09-13T18:00:00.000Z'));

@@ -26,6 +26,15 @@ branding, business records or shared automation is involved.
   Deadlines and dates are stored as UTC instants and shown
   in Central time. Quarterly date generation uses the recurrence rule even beyond
   the currently materialized regular-game horizon.
+- One-time 2026-Q4 exception: before the September 21 response cutoff, the host
+  extended only the remaining `ACTIVE`, unreplaced initial qualifier offers from
+  10:00 AM Central (`2026-09-21T15:00:00.000Z`) to 9:00 PM Central
+  (`2026-09-22T02:00:00.000Z`). The active plan deadline moved with those offers
+  and its mutation version advanced from 4 to 5. `CONFIRMED`, `REPLACED` and
+  `EXPIRED` offers remained historical; the schedule version, frozen season
+  snapshot and delivered SMS bodies were unchanged, and no message was resent.
+  Migration 0009 records this exact correction idempotently. This exception does
+  not alter the ordinary seven-day/10:00 Central policy.
 - Routine host work is recording game results. The scheduler creates games,
   freezes qualification, opens the next season, queues invitations, handles RSVP,
   fills available seats and sends reminders. The admin exposes the next date and
