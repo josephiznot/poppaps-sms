@@ -205,7 +205,7 @@ export async function deliveryIsStillValid(db: D1Database, d: DeliveryRow, nowIs
   }
   if (plan.status !== 'ACTIVE' || plan.cancelled || plan.starts_at <= nowIso) return false;
 
-  if (d.kind.startsWith('DEALER_')) {
+  if (d.kind.startsWith('DEALER_') && !d.offer_id) {
     const dealer = await db
       .prepare("SELECT phone FROM members WHERE phone=? AND status='SUBSCRIBED' AND is_designated_dealer=1")
       .bind(d.recipient)
@@ -323,7 +323,8 @@ export async function retryDelivery(env: Env, id: string, now = new Date()): Pro
 }
 
 /**
- * Recover tournament invitations or designated-dealer notices that Twilio definitively rejected because its
+ * Recover tournament invitations (including the migrated, offer-linked host
+ * notice) that Twilio definitively rejected because its
  * own opt-out state had not yet been cleared. An authoritative inbound START is
  * the evidence that the provider block is gone; all business intent is checked
  * again here before returning the existing logical message to the outbox.
@@ -347,43 +348,25 @@ export async function requeueProviderOptOutTournamentInvites(
          AND provider_sid IS NULL
          AND (expires_at IS NULL OR expires_at>?)
          AND (
-          (kind='TOURNAMENT_INVITE' AND EXISTS (
+          (offer_id IS NOT NULL AND EXISTS (
            SELECT 1
            FROM tournament_offers o
+           LEFT JOIN tournament_host_offers h ON h.offer_id=o.id
            JOIN tournament_plans p ON p.id=o.plan_id
            JOIN games g ON g.id=p.game_id
            WHERE o.id=sms_deliveries.offer_id
              AND o.plan_id=sms_deliveries.plan_id
              AND o.member_phone=sms_deliveries.recipient
              AND o.state='ACTIVE'
-             AND o.response_deadline>?
+             AND (h.offer_id IS NOT NULL OR o.response_deadline>?)
              AND p.status='ACTIVE'
              AND g.id=sms_deliveries.game_id
              AND g.cancelled=0
              AND g.starts_at>?
           ))
-          OR
-          (kind='DEALER_TOURNAMENT_NOTICE' AND EXISTS (
-            SELECT 1
-            FROM tournament_plans p
-            JOIN games g ON g.id=p.game_id
-            JOIN members m ON m.phone=sms_deliveries.recipient
-            WHERE p.id=sms_deliveries.plan_id
-              AND g.id=sms_deliveries.game_id
-              AND p.status='ACTIVE'
-              AND p.schedule_version=sms_deliveries.version
-              AND g.cancelled=0
-              AND g.starts_at>?
-              AND m.status='SUBSCRIBED'
-              AND m.is_designated_dealer=1
-              AND NOT EXISTS (
-                SELECT 1 FROM tournament_offers o
-                WHERE o.plan_id=p.id AND o.member_phone=m.phone
-                  AND o.state IN ('ACTIVE','CONFIRMED')
-              )
-          )))`,
+          )`,
     )
-    .bind(nowIso, recipient, nowIso, nowIso, nowIso, nowIso)
+    .bind(nowIso, recipient, nowIso, nowIso, nowIso)
     .run();
   return result.meta.changes ?? 0;
 }

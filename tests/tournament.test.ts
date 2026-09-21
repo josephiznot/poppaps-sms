@@ -30,9 +30,9 @@ async function seedScoring(db: D1Database, points = [10, 9, 8, 7, 6, 5, 4, 3]): 
   ).bind(at, at, at, at).run();
   for (let i = 0; i < phones.length; i++) {
     await db.prepare(
-      `INSERT INTO members(phone,display_name,status,awaiting_name,created_at,updated_at)
-       VALUES(?,?, 'SUBSCRIBED',0,?,?)`,
-    ).bind(phones[i], `Player ${i + 1}`, at, at).run();
+      `INSERT INTO members(phone,display_name,status,awaiting_name,created_at,updated_at,is_designated_dealer)
+       VALUES(?,?, 'SUBSCRIBED',0,?,?,?)`,
+    ).bind(phones[i], `Player ${i + 1}`, at, at, i === 0 ? 1 : 0).run();
     await db.prepare(
       'INSERT INTO points_ledger(id,member_phone,game_id,points,place,awarded_at) VALUES(?,?,?,?,?,?)',
     ).bind(`p${i}`, phones[i], 'regular-1', points[i], Math.min(i + 1, 5), at).run();
@@ -46,7 +46,11 @@ describe('quarterly tournament dates', () => {
     expect(tournamentOccurrenceForQuarter(2027, 1)).toBe('2027-01-05T00:30:00.000Z');
     expect(tournamentDeadlines('2026-09-28T23:30:00.000Z')).toEqual({
       qualificationCutoff: '2026-09-14T15:00:00.000Z',
-      confirmationDeadline: '2026-09-21T15:00:00.000Z',
+      confirmationDeadline: '2026-09-22T02:00:00.000Z',
+    });
+    expect(tournamentDeadlines('2027-01-05T00:30:00.000Z')).toEqual({
+      qualificationCutoff: '2026-12-21T16:00:00.000Z',
+      confirmationDeadline: '2026-12-29T03:00:00.000Z',
     });
   });
 });

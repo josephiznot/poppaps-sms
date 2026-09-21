@@ -154,8 +154,21 @@ CREATE TABLE IF NOT EXISTS tournament_board (
 CREATE INDEX IF NOT EXISTS idx_tournament_board_order
   ON tournament_board(plan_id, rank);
 
--- Every person ever offered a seat remains here. Only ACTIVE and CONFIRMED
--- reserve one of the eight seats. Once replaced, an old offer cannot reclaim it.
+-- The single designated host/dealer always has a real player offer. This
+-- sidecar keeps that policy explicit without changing historical offer rows.
+-- An outside-top-eight host offer does not reserve a ranked seat.
+CREATE TABLE IF NOT EXISTS tournament_host_offers (
+  offer_id                 TEXT PRIMARY KEY,
+  plan_id                  TEXT NOT NULL,
+  member_phone             TEXT NOT NULL,
+  counts_ranked_seat       INTEGER NOT NULL
+                              CHECK (counts_ranked_seat IN (0,1)),
+  UNIQUE (plan_id, member_phone)
+);
+
+-- Every person ever offered a seat remains here. ACTIVE and CONFIRMED ranked
+-- offers reserve the eight ranked seats; an outside-top-eight host offer is extra.
+-- Once replaced, an old offer cannot reclaim its ranked seat.
 CREATE TABLE IF NOT EXISTS tournament_offers (
   id                    TEXT PRIMARY KEY,
   plan_id               TEXT NOT NULL,
@@ -177,15 +190,21 @@ CREATE INDEX IF NOT EXISTS idx_tournament_offers_plan_state
   ON tournament_offers(plan_id, state, board_rank);
 CREATE TRIGGER IF NOT EXISTS trg_tournament_offer_capacity_insert
 BEFORE INSERT ON tournament_offers
-WHEN NEW.state IN ('ACTIVE','CONFIRMED') AND
-     (SELECT COUNT(*) FROM tournament_offers WHERE plan_id=NEW.plan_id AND state IN ('ACTIVE','CONFIRMED')) >= 8
+WHEN NEW.state IN ('ACTIVE','CONFIRMED')
+ AND COALESCE((SELECT counts_ranked_seat FROM tournament_host_offers WHERE offer_id=NEW.id), 1)=1
+ AND (SELECT COUNT(*) FROM tournament_offers o
+      WHERE o.plan_id=NEW.plan_id AND o.state IN ('ACTIVE','CONFIRMED')
+        AND COALESCE((SELECT h.counts_ranked_seat FROM tournament_host_offers h WHERE h.offer_id=o.id), 1)=1) >= 8
 BEGIN
   SELECT RAISE(ABORT, 'tournament offer capacity exceeded');
 END;
 CREATE TRIGGER IF NOT EXISTS trg_tournament_offer_capacity_update
 BEFORE UPDATE OF state ON tournament_offers
-WHEN OLD.state NOT IN ('ACTIVE','CONFIRMED') AND NEW.state IN ('ACTIVE','CONFIRMED') AND
-     (SELECT COUNT(*) FROM tournament_offers WHERE plan_id=NEW.plan_id AND state IN ('ACTIVE','CONFIRMED')) >= 8
+WHEN OLD.state NOT IN ('ACTIVE','CONFIRMED') AND NEW.state IN ('ACTIVE','CONFIRMED')
+ AND COALESCE((SELECT counts_ranked_seat FROM tournament_host_offers WHERE offer_id=NEW.id), 1)=1
+ AND (SELECT COUNT(*) FROM tournament_offers o
+      WHERE o.plan_id=NEW.plan_id AND o.state IN ('ACTIVE','CONFIRMED')
+        AND COALESCE((SELECT h.counts_ranked_seat FROM tournament_host_offers h WHERE h.offer_id=o.id), 1)=1) >= 8
 BEGIN
   SELECT RAISE(ABORT, 'tournament offer capacity exceeded');
 END;

@@ -21,20 +21,20 @@ branding, business records or shared automation is involved.
   quarter rather than silently inventing a late-quarter championship.
 - Invitations / qualification close: 10:00 Central fourteen calendar days before
   the tournament. Results from regular games after this cutoff belong to the new
-  season, even if played before the tournament. Initial invitees have exactly seven
-  calendar days to respond, until 10:00 Central seven days before the tournament.
+  season, even if played before the tournament. Initial ranked invitees respond by
+  21:00 Central on the regular-game night seven days before the tournament.
   Deadlines and dates are stored as UTC instants and shown
   in Central time. Quarterly date generation uses the recurrence rule even beyond
   the currently materialized regular-game horizon.
-- One-time 2026-Q4 exception: before the September 21 response cutoff, the host
-  extended only the remaining `ACTIVE`, unreplaced initial qualifier offers from
+- The already-active 2026-Q4 plan was corrected before the September 21 response
+  cutoff. Only the remaining `ACTIVE`, unreplaced initial qualifier offers moved from
   10:00 AM Central (`2026-09-21T15:00:00.000Z`) to 9:00 PM Central
   (`2026-09-22T02:00:00.000Z`). The active plan deadline moved with those offers
   and its mutation version advanced from 4 to 5. `CONFIRMED`, `REPLACED` and
   `EXPIRED` offers remained historical; the schedule version, frozen season
   snapshot and delivered SMS bodies were unchanged, and no message was resent.
-  Migration 0009 records this exact correction idempotently. This exception does
-  not alter the ordinary seven-day/10:00 Central policy.
+  Migration 0009 records this exact correction idempotently. The 21:00 cutoff is
+  also the recurring policy for later tournaments.
 - Routine host work is recording game results. The scheduler creates games,
   freezes qualification, opens the next season, queues invitations, handles RSVP,
   fills available seats and sends reminders. The admin exposes the next date and
@@ -47,10 +47,12 @@ branding, business records or shared automation is involved.
 - Freeze the complete ranked board, scores, scoring tie-break, selected qualifiers,
   opt-out status, date and deadline. Opted-out qualifiers retain their historical
   earned place but receive no message. Eligible replacements come from this frozen
-  board. A replacement tie blocks for host choice. No automatic promotion across
-  an unresolved equal-score group.
-- Declines and opted-out seats may be replaced automatically in clear board order.
-  Pending invitations expire at the stored deadline. Replacement invitations get
+  board, excluding the separately offered host. A remaining replacement tie blocks
+  for host choice. No automatic promotion across an unresolved equal-score group.
+- Declines and opted-out ranked seats may be replaced automatically in clear board order.
+  Ordinary pending invitations expire at the stored deadline. The host offer survives
+  that cutoff and SMS opt-out, though dispatch still requires consent and explicit
+  FOLD may decline it. Replacement invitations get
   twenty-four hours to respond, capped at twenty-four hours before play; do not dispatch
   new invites inside 24 hours of play. Original offers are retired atomically when
   replaced; a later CALL cannot reclaim a reassigned seat. STOP always wins, FOLD
@@ -68,18 +70,24 @@ mean delivered. Persist and verify signed Twilio status callbacks when available
 Do not retry ambiguous network/provider outcomes automatically; show an exception
 and provide explicit reconciliation/retry controls. Recheck subscription and event
 validity immediately before sending. Pace SMS conservatively at one request/sec.
-When a signed Twilio webhook reports provider-standard START or UNSTOP, with or
+Initial offers are the selected ranked top eight plus the designated host only when
+the host is outside that eight. All are actionable player offers with ordinary copy;
+an outside-top-eight host does not consume ranked capacity. No duplicate dealer
+notice or reminder is created. When a signed Twilio webhook reports provider-standard START or UNSTOP, with or
 without OptOutType, it may requeue the same sender's definite no-SID error-21610
 tournament invitation after local member reactivation, but only while the offer
-and plan are active, the offer response and delivery deadlines remain open, and
+and plan are active, the delivery remains open, the ordinary offer response deadline
+remains open (host offers are deadline-exempt), and
 the linked game is future and uncancelled. Preserve attempt history and let the
 ordinary hourly outbox perform the send; the inbound webhook never drains the
 outbox. Bare JOIN, YES, and uncertain or provider-accepted delivery states provide
 no authority to recover a message.
 
 Reminder intents are per current offer/recipient, exclude declined/replaced/opted-out
-players, and remain recoverable independently. An event with no invites must not
-consume its eventual reminder. Fast CALL after accepted send works because offers
+players, and remain recoverable independently. Every due-window tick reconciles
+current subscribed offers even after the game-level batch ran, so renewed consent
+can add the one missing reminder without duplicating existing logical work. An event
+with no invites must not consume its eventual reminder. Fast CALL after accepted send works because offers
 exist before transport. Legacy season/RSVP records remain readable; completed legacy
 events reject responses. Do not automatically resend legacy invitations/reminders.
 

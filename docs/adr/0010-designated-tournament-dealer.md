@@ -1,46 +1,54 @@
-# ADR-0010: Designated tournament dealer notifications
+# ADR-0010: Designated host/dealer is a tournament player
 
-- Status: Accepted
+- Status: Accepted (revised 2026-09-21)
 - Date: 2026-09-14
 
 ## Context
 
-The Special Players tournament needs a designated dealer who may not qualify as
-a player. Treating that person as an invitee would incorrectly reserve one of the
-eight ranked seats and ask for an RSVP the dealer does not need. The already-active
-2026-Q4 plan also means this cannot depend only on qualification close.
+The Special Players tournament has one designated host/dealer. The earlier
+implementation treated that person as a non-player notification recipient. The
+business policy is that the host always plays, must be able to CALL or FOLD, and
+must not displace a ranked qualifier when outside the selected top eight.
+
+The active 2026-Q4 plan already delivered the host the exact ordinary player
+invitation body as a `DEALER_TOURNAMENT_NOTICE`. That delivery must become evidence
+for the host's real offer without a resend or any body, SID, attempt, delivery-state,
+schedule-version, or historical-offer rewrite.
 
 ## Decision
 
-Members have a reusable `is_designated_dealer` role flag. Production assignment is
-a separate operation after migration 0008; no identity or phone is stored here.
+`members.is_designated_dealer` identifies the single designated host/dealer. At
+qualification close, the system creates actionable offers for the selected ranked
+top eight. If the host is among them, that selected offer is also marked as the host
+offer and the initial total remains eight. If the host is outside them, the system
+adds one host offer and the initial total is nine.
 
-Every normal tournament tick ensures each subscribed designated dealer has one
-schedule-versioned notice for the current ACTIVE plan until the future tournament
-starts. To validate the player-facing copy, its body is byte-for-byte the same
-`automaticTournamentInvite` body sent to an initially qualified player, including
-CALL/FOLD wording. The delivery remains a `DEALER_TOURNAMENT_NOTICE`: it has no
-offer, consumes no seat, and CALL/FOLD cannot act on it. Dealer attendance never
-creates a `tournament_offers` row.
+Host-offer metadata records whether the offer consumes ranked capacity. A selected
+top-eight host counts among the eight; an outside-top-eight host does not. The latter
+is excluded from lower-ranked replacement groups, so clear ranked vacancies continue
+strictly down the frozen board without a false tie involving an already-offered host.
 
-Changing that shared copy does not create or replace current-version dealer work.
-The existing logical key and schedule version remain authoritative, so a previously
-created or delivered 2026-Q4 notice is not resent by a later tick.
+The host uses the byte-for-byte ordinary player invitation, reminder, reschedule and
+cancellation paths. CALL/FOLD acts on the real offer. No separate dealer notice,
+night-before reminder, date-change message or cancellation is created for new plans.
 
-An ACTIVE or CONFIRMED player offer takes precedence: normal player invitation and
-reminder behavior applies and queued dealer work is suppressed. Otherwise the dealer
-gets dealer-specific night-before copy. Reschedules create a versioned update.
-Cancellation creates one dealer cancellation only when a prior dealer notice had a
-provider-possible outcome (`SENDING`, `ACCEPTED`, `DELIVERED`, or `UNKNOWN`).
+An ordinary pending offer expires at the recurring 21:00 Central response cutoff.
+The host offer remains active through that cutoff and is not retired merely because
+the host unsubscribes from SMS. Consent remains authoritative for delivery: an
+unsubscribed host receives no outbound SMS until subscribed. Explicit FOLD may
+decline the host offer. A ranked host's FOLD opens a ranked vacancy; an extra host's
+FOLD does not.
 
-STOP and dispatch-time subscription checks always apply. Signed provider-standard
-START or UNSTOP can requeue an existing dealer notice only after a definite no-SID
-Twilio 21610 failure, while the dealer role, plan and future game remain current and
-no player offer supersedes it. Unknown or provider-accepted sends
-are never recovered.
+Migration 0010 first updates the database capacity triggers, then guards on the
+exact active 2026-Q4 version-5, schedule-version-1 state. It creates the extra host
+offer, links the already-delivered exact-copy dealer delivery to that offer, and
+clears the obsolete replacement-tie blocker only when one non-host tied candidate
+remains. It is idempotent and performs no send or tournament tick.
 
 ## Consequences
 
-Dealer attendance is independent of the eight-seat offer invariant and CALL/FOLD.
-Hourly ticks cover role assignment after a plan is ACTIVE, while unique logical keys
-make repeated ticks and copy-only code changes idempotent.
+There are always eight ranked seats and one guaranteed host player. Initial offer
+and SMS counts are eight when the host is selected, otherwise nine. Historical
+dealer delivery kinds remain readable for the migrated message, but current
+operation is entirely offer-driven. Provider receipt history and frozen tournament
+history stay intact.

@@ -20,14 +20,15 @@ reminders and clear-cut replacements. Routine host work is entering game results
 date conflicts, missing results, cutoff ties and uncertain texts are exceptions.
 Default tournament: first off-week Monday each quarter, 18:30 Central; qualification
 and invitations fourteen calendar days before at 10:00; initial invitees have
-seven calendar days to reply, until seven days before play at 10:00. Atomic
+seven calendar days to reply, until the regular-game night seven days before
+play at 21:00. Atomic
 persistent intent precedes provider sends; no blind retry
 of uncertain sends. Expired/replaced offers cannot reclaim seats. The system stays
 on Cloudflare/D1/Twilio and is completely separate from Skooped or other projects.
 The public footer credit has been removed. Do not load unrelated business records.
-Apply migrations 0005, 0006, 0007, 0008, then 0009 before deploying. Migration
-0009 is an idempotent record of the already-applied 2026-Q4 deadline exception;
-it leaves the corrected version-5 production plan unchanged. Use Node 24+ for
+Apply migrations 0005 through 0010 in order before deploying. Migration 0009 is
+an idempotent record of the already-applied 2026-Q4 deadline correction; 0010
+links the delivered host message to a real offer without resending it. Use Node 24+ for
 SQLite tests.
 Result edits preserve season attribution and use atomic, version-guarded replacement.
 Public profile IDs are stored random identifiers; always minimize public names.
@@ -90,37 +91,37 @@ which standings `SUM` naturally (ADR-0002).
 
 The hourly Worker schedules the first off-week Monday each quarter at 18:30
 Central. Invitations and qualification close happen fourteen days before at 10:00;
-initial replies are due seven days before at 10:00. The host records results and
+initial replies are due on the regular-game night seven days before at 21:00. The host records results and
 changes dates only for conflicts. Missing results, insufficient standings, cutoff ties and
 uncertain delivery appear as exceptions in the admin Tournament page.
 
-One-time 2026-Q4 exception: before the September 21 cutoff, the host extended only
-the remaining active initial offers from 10:00 AM to 9:00 PM Central that day. The
-plan deadline moved with them; confirmed and retired offers, delivered message
-bodies, the frozen season snapshot and the schedule version did not change. The
-ordinary 10:00 AM policy continues for later tournaments.
+The already-active 2026-Q4 plan was corrected before the September 21 cutoff from
+10:00 AM to 9:00 PM Central that day. The plan deadline moved with the remaining
+active offers; confirmed and retired offers, delivered message bodies, the frozen
+season snapshot and the schedule version did not change. The 9:00 PM cutoff is the
+recurring policy for later tournaments.
 
 The full board, qualifiers, season boundary, seat offers and unique outbound work
 are persisted atomically before sending. Opted-out qualifiers remain in historical
 records without being texted. Clear vacancies are filled from frozen standings;
 replacement ties need host selection. CALL confirms an active seat offer; FOLD
 releases it without unsubscribing. Expired or replaced invitations cannot reclaim
-seats. Reminder recipients are current offers only. STOP/HELP remain load-bearing.
+seats. Reminder recipients are current offers only. Tournament reminder work
+reconciles per recipient on every due tick, so consent restored before play can
+queue the one missing reminder without duplicating recipients already queued or
+sent. STOP/HELP remain load-bearing.
 Per-recipient SID and status distinguish provider acceptance from delivery.
 Unknown transport outcomes never automatically retry.
 A signed provider-standard Twilio START or UNSTOP may recover only a definite
-no-SID 21610 failure for the sender's active, unexpired tournament invitation or
-still-current designated-dealer notice;
+no-SID 21610 failure for the sender's active tournament invitation;
 it queues the existing logical delivery for the hourly outbox and never sends
 from the webhook.
-A subscribed designated dealer receives the exact initial qualified-player invite
-body to validate player-facing copy, then dealer-specific night-before and lifecycle
-copy. The dealer delivery keeps no seat offer, consumes no seat, and CALL/FOLD has no
-effect. Copy changes preserve the existing logical key and schedule version, so they
-do not resend current-version notices. A current player offer takes precedence.
-Hourly ticks cover plans already ACTIVE; reschedules, cancellations,
-STOP and narrow no-SID 21610 recovery follow ADR-0010. Dealer notice eligibility
-continues until tournament start and does not end at the player response deadline.
+The single designated host/dealer is always a player. The initial player offers are
+the ranked top eight plus the host only when the host is outside that selected eight.
+Every offer is CALL/FOLD-actionable and uses ordinary player copy; no duplicate dealer
+notice or reminder is created. An outside-top-eight host does not consume ranked
+capacity or enter replacement tie groups. The host offer survives the RSVP cutoff and
+SMS opt-out, while dispatch still requires current consent; FOLD can decline it.
 
 ## Interaction surfaces (ADR-0005)
 
@@ -154,7 +155,7 @@ continues until tournament start and does not end at the player response deadlin
    public standings). (ADR-0002, ADR-0005)
 4. **Special Players tournament** — ✅ built (admin: automatic quarterly calendar → frozen qualification → durable invites). (ADR-0002)
    - **Seat RSVPs** — ✅ built (reply IN to confirm; admin tracker + automatic clear-cut next-in-line backfill; invitee-only tournament reminders). (ADR-0006)
-   - **Designated dealer** — ✅ built (role-based notice/reminder lifecycle; no ranked seat consumed). (ADR-0010)
+   - **Host/dealer player** — ✅ built (guaranteed actionable offer; extra offer outside the ranked eight). (ADR-0010)
 5. **Rewards / attendance** — ✅ mechanism built (host-marked attendance →
    data-driven promos via SMS); concrete reward rules still forming —
    `seed.sql` has a placeholder. (ADR-0004)
@@ -241,4 +242,4 @@ SMS admin *(superseded)*, `0004` rewards & attendance, `0005` interaction channe
 (IN confirm + host-paced backfill), `0007` tournament placements (ranks saved
 with 0 points; real champion on /seasons), `0008` public tournament visibility
 (invite-only notice, never "next game").
-`0009` defines automatic tournament operations; `0010` defines designated-dealer messaging.
+`0009` defines automatic tournament operations; `0010` defines the designated host/dealer player policy.
