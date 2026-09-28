@@ -2,6 +2,10 @@
 
 Status: Accepted, 2026-09-27.
 
+Extension: [ADR-0012](0012-scheduled-invitation-campaigns.md) permits a separately
+approved, scheduled invitation campaign to send without releasing this game's
+automatic reminder hold. All other game-linked delivery keeps the hold check.
+
 ## Context
 
 Joseph authorized a one-time game on October 26, 2026 at 18:30 Central, with

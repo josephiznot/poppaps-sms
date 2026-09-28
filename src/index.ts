@@ -13,6 +13,7 @@ import { admin } from './routes/admin';
 import { publicRoutes } from './routes/public';
 import { health } from './routes/health';
 import { ensureUpcomingGames, sendDueReminders, drainOutbox } from './lib/jobs';
+import { queueDueCampaigns } from './lib/delivery';
 import { tickTournaments } from './lib/tournament';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -41,6 +42,7 @@ export default {
         await ensureUpcomingGames(env); // keep the biweekly game on the calendar
         await tickTournaments(env); // schedule, qualify and manage tournament seats
         await sendDueReminders(env); // persist recipient reminder intent
+        await queueDueCampaigns(env); // snapshot approved one-off campaigns when due
         await drainOutbox(env); // deliver independently, with per-recipient receipts
       })(),
     );

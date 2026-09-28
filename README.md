@@ -137,6 +137,13 @@ Real SMS sending still needs valid Twilio creds in `.dev.vars`; everything else
   sending game-linked work. Keep the invitation in `docs/campaigns/` until Joseph
   confirms the campaign. There is no automatic payment verification or release
   button. [ADR-0011](docs/adr/0011-game-message-holds.md) records this boundary.
+- **Scheduled invitations**: after Joseph confirms the exact text and send window,
+  create an approved `sms_campaigns` record. The existing hourly job snapshots all
+  subscribed members once when due, then uses the durable outbox. Current opt-outs,
+  cancellation and expiry still suppress sending. This separately approved invite
+  can send while automatic game reminders stay held. There is no campaign editor;
+  scheduling is an explicit operational database write. Record approval and the
+  campaign identifier in `docs/campaigns/`. [ADR-0012](docs/adr/0012-scheduled-invitation-campaigns.md).
 - **Record results** after each game. Choose finishers and attendance. Results save atomically; editing an old game preserves its season. Tournament results award zero season points.
 - **Tournament dates appear automatically**: first off-week Monday each quarter, 6:30 PM Central. Invitations and qualification close are fourteen days before play at 10:00 AM Central. Initial ranked replies are due at 9:00 PM on the regular-game night seven days before play; replacements get 24 hours, capped at 24 hours before play.
 - **2026 transition**: the next tournament is September 28. Qualification closes September 14, making September 7 the final scoring game of the current season; September 21 begins the next season. Normal quarterly scheduling resumes in 2027.
@@ -152,6 +159,10 @@ For the game-message hold feature, apply `node node_modules/wrangler/bin/wrangle
 once before deploying the hold-aware Worker. This additive migration defaults
 existing games to unheld and queues/sends nothing. Verify the deployed revision
 before creating a held one-off event; use `--local` for an existing local database.
+
+For scheduled invitation campaigns, apply `node node_modules/wrangler/bin/wrangler.js d1 execute poker-sms --remote --file=migrations/0013_scheduled_sms_campaigns.sql`
+once before deploying its Worker revision. The migration creates no approved
+campaign and sends nothing. Verify deployment before writing any approval record.
 
 Read [ADR-0009](docs/adr/0009-automatic-tournaments.md) and [ADR-0010](docs/adr/0010-designated-tournament-dealer.md). Apply prerequisite migrations **0005 through 0010 in order** before deploying this revision. Deploy and verify the replacement-delivery bind fix before applying repair migration 0011. Do not run the fresh schema against a legacy database as a substitute for migrations.
 

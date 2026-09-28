@@ -21,6 +21,14 @@ them. The [October 26 $50 game](docs/campaigns/2026-10-26-special-game.md) must 
 held until Joseph confirms its campaign. The invitation is an unsent draft.
 This does not add payment verification or automatically reserve paid seats.
 
+**Scheduled invitation campaigns (ADR-0012):** migration 0013 adds explicitly
+approved, timed `sms_campaigns`. The hourly job snapshots all subscribed players
+once and the outbox rechecks approval, exact copy, game, timing and consent.
+Only a valid campaign invitation can bypass a game hold; regular reminders stay
+held. The September 28 send time and October 19/refund terms are still proposals
+until Joseph confirms them in the dated campaign record. No campaign has been
+approved merely by adding this capability.
+
 - **Implemented on Cloudflare Workers + D1 + Cron** (Hono). One Worker serves
   `POST /sms` (Twilio webhook), `/admin/*` (host web app, password-gated), `GET /`
   (public standings), plus an hourly reminder cron. The previous AWS SAM scaffold
@@ -119,6 +127,8 @@ a regular game reminder.
 
 0. **One-off campaign message holds** — explicit per-game hold; the calendar can
    contain an event before its SMS campaign is approved. (ADR-0011.)
+   **Scheduled invitations** — separate explicit campaign approval and send window;
+   all opted-in players are snapshotted once when due. (ADR-0012.)
 
 1. **Game-night reminders** — ✅ built (Workers cron + Twilio).
 2. **Members + opt-in name capture** — ✅ built (JOIN → name reply → display name).

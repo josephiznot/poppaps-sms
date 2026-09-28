@@ -108,6 +108,15 @@ regress.
   banners omit held games. A draft invitation is stored separately from the
   outbox. Releasing a hold or sending its campaign requires explicit confirmation;
   neither scheduling nor a player's reply verifies payment. (ADR-0011.)
+- FR-R6. **Approved one-time invitation campaigns:** persist the exact invitation,
+  linked game, send window and explicit approval in `sms_campaigns`. At the due
+  hourly tick, atomically snapshot all currently subscribed members into unique
+  per-recipient outbox work exactly once. The outbox defers future campaigns and
+  rechecks approval, cancellation, matching body/game, time window and current
+  consent before every send. Only valid `CAMPAIGN_INVITE` work may bypass its
+  game's message hold; automatic reminders remain held. Campaign expiry stops
+  late sends, and provider receipts remain separate from scheduling or queuing.
+  This feature does not verify payments or promise player refunds. (ADR-0012.)
 
 ### 2.2 Membership & opt-in
 - FR-M1. **Members are keyed by phone**; one entity (Subscriber + Player collapsed,

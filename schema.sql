@@ -210,11 +210,26 @@ BEGIN
   SELECT RAISE(ABORT, 'tournament offer capacity exceeded');
 END;
 
+-- Approved, time-bounded one-off SMS campaigns. The hourly due tick atomically
+-- snapshots subscribed recipients into sms_deliveries and sets queued_at once.
+CREATE TABLE IF NOT EXISTS sms_campaigns (
+  id            TEXT PRIMARY KEY,
+  game_id       TEXT NOT NULL,
+  body          TEXT NOT NULL,
+  scheduled_at  TEXT NOT NULL,
+  expires_at    TEXT NOT NULL,
+  approved_at   TEXT,
+  queued_at     TEXT,
+  cancelled_at  TEXT,
+  created_at    TEXT NOT NULL
+);
+
 -- Provider transport is separate from business intent. An UNKNOWN send is
 -- never retried automatically because the carrier may have accepted it.
 CREATE TABLE IF NOT EXISTS sms_deliveries (
   id                    TEXT PRIMARY KEY,
   logical_key           TEXT NOT NULL,
+  campaign_id           TEXT,
   plan_id               TEXT,
   game_id               TEXT,
   offer_id              TEXT,
@@ -246,3 +261,5 @@ CREATE INDEX IF NOT EXISTS idx_sms_deliveries_outbox
   ON sms_deliveries(state, retryable, created_at);
 CREATE INDEX IF NOT EXISTS idx_sms_deliveries_plan
   ON sms_deliveries(plan_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_sms_deliveries_campaign
+  ON sms_deliveries(campaign_id, created_at);

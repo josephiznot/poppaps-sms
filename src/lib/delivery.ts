@@ -4,6 +4,7 @@ import { getSmsStatus, sendSmsDetailed, TwilioSendError, type TwilioSendResult }
 
 export type DeliveryKind =
   | 'REGULAR_REMINDER'
+  | 'CAMPAIGN_INVITE'
   | 'TOURNAMENT_INVITE'
   | 'TOURNAMENT_REMINDER'
   | 'TOURNAMENT_DATE_CHANGE'
@@ -26,6 +27,7 @@ export type DeliveryState =
 export interface DeliveryRow {
   id: string;
   logical_key: string;
+  campaign_id: string | null;
   plan_id: string | null;
   game_id: string | null;
   offer_id: string | null;
@@ -58,6 +60,7 @@ export interface QueueDeliveryInput {
   kind: DeliveryKind;
   body: string;
   now: string;
+  campaignId?: string | null;
   planId?: string | null;
   gameId?: string | null;
   offerId?: string | null;
@@ -73,13 +76,14 @@ export async function queueDelivery(db: D1Database, input: QueueDeliveryInput): 
   await db
     .prepare(
       `INSERT OR IGNORE INTO sms_deliveries
-       (id, logical_key, plan_id, game_id, offer_id, recipient, kind, body, version,
+       (id, logical_key, campaign_id, plan_id, game_id, offer_id, recipient, kind, body, version,
         state, expires_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'QUEUED', ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'QUEUED', ?, ?, ?)`,
     )
     .bind(
       id,
       input.logicalKey,
+      input.campaignId ?? null,
       input.planId ?? null,
       input.gameId ?? null,
       input.offerId ?? null,
@@ -106,6 +110,35 @@ export async function listDeliveries(db: D1Database, planId?: string): Promise<D
     : db.prepare('SELECT * FROM sms_deliveries ORDER BY created_at DESC LIMIT 250');
   const rows = await statement.all<DeliveryRow>();
   return rows.results ?? [];
+}
+
+/** Snapshot subscribers once when an approved campaign reaches its send time. */
+export async function queueDueCampaigns(env: Env, now = new Date()): Promise<number> {
+  const nowIso = now.toISOString();
+  const results = await env.DB.batch([
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO sms_deliveries
+       (id,logical_key,campaign_id,game_id,recipient,kind,body,version,state,expires_at,created_at,updated_at)
+       SELECT lower(hex(randomblob(16))), 'campaign:'||c.id||':invite', c.id, c.game_id,
+              m.phone, 'CAMPAIGN_INVITE', c.body, 1, 'QUEUED', c.expires_at, ?, ?
+       FROM sms_campaigns c
+       JOIN games g ON g.id=c.game_id
+       JOIN members m ON m.status='SUBSCRIBED'
+       WHERE c.approved_at IS NOT NULL AND c.cancelled_at IS NULL AND c.queued_at IS NULL
+         AND c.scheduled_at<=? AND c.expires_at>?
+         AND g.cancelled=0 AND g.starts_at>?`,
+    ).bind(nowIso, nowIso, nowIso, nowIso, nowIso),
+    env.DB.prepare(
+      `UPDATE sms_campaigns SET queued_at=?
+       WHERE approved_at IS NOT NULL AND cancelled_at IS NULL AND queued_at IS NULL
+         AND scheduled_at<=? AND expires_at>?
+         AND EXISTS (
+           SELECT 1 FROM games g
+           WHERE g.id=sms_campaigns.game_id AND g.cancelled=0 AND g.starts_at>?
+         )`,
+    ).bind(nowIso, nowIso, nowIso, nowIso),
+  ]);
+  return results[1]?.meta.changes ?? 0;
 }
 
 async function getDelivery(db: D1Database, id: string): Promise<DeliveryRow | null> {
@@ -151,14 +184,22 @@ async function claimNext(db: D1Database, now: Date, tickStartedIso: string): Pro
            attempt_count=attempt_count+1, updated_at=?
        WHERE id = (
          SELECT id FROM sms_deliveries
-         WHERE (state='QUEUED' OR (state='FAILED' AND retryable=1 AND attempt_count < 3))
-           AND (expires_at IS NULL OR expires_at > ?)
-           AND (attempted_at IS NULL OR attempted_at < ?)
-         ORDER BY created_at ASC LIMIT 1
+          WHERE (state='QUEUED' OR (state='FAILED' AND retryable=1 AND attempt_count < 3))
+            AND (expires_at IS NULL OR expires_at > ?)
+            AND (attempted_at IS NULL OR attempted_at < ?)
+            AND (
+              kind<>'CAMPAIGN_INVITE' OR campaign_id IS NULL
+              OR NOT EXISTS (SELECT 1 FROM sms_campaigns c WHERE c.id=sms_deliveries.campaign_id)
+              OR EXISTS (
+                SELECT 1 FROM sms_campaigns c
+                WHERE c.id=sms_deliveries.campaign_id AND c.scheduled_at<=?
+              )
+            )
+          ORDER BY created_at ASC LIMIT 1
        )
        AND (state='QUEUED' OR (state='FAILED' AND retryable=1 AND attempt_count < 3))`,
     )
-    .bind(token, nowIso, nowIso, nowIso, nowIso, tickStartedIso)
+    .bind(token, nowIso, nowIso, nowIso, nowIso, tickStartedIso, nowIso)
     .run();
   return db.prepare('SELECT * FROM sms_deliveries WHERE claim_token=?').bind(token).first<DeliveryRow>();
 }
@@ -172,6 +213,38 @@ export async function deliveryIsStillValid(db: D1Database, d: DeliveryRow, nowIs
   if (!member) return false;
 
   if (d.expires_at && d.expires_at <= nowIso) return false;
+  if (d.kind === 'CAMPAIGN_INVITE') {
+    if (!d.campaign_id || !d.game_id) return false;
+    const campaign = await db
+      .prepare(
+        `SELECT c.game_id,c.body,c.scheduled_at,c.expires_at,c.approved_at,c.queued_at,c.cancelled_at,
+                g.cancelled,g.starts_at
+         FROM sms_campaigns c JOIN games g ON g.id=c.game_id
+         WHERE c.id=?`,
+      )
+      .bind(d.campaign_id)
+      .first<{
+        game_id: string;
+        body: string;
+        scheduled_at: string;
+        expires_at: string;
+        approved_at: string | null;
+        queued_at: string | null;
+        cancelled_at: string | null;
+        cancelled: number;
+        starts_at: string;
+      }>();
+    return !!campaign
+      && !!campaign.approved_at
+      && !!campaign.queued_at
+      && !campaign.cancelled_at
+      && campaign.scheduled_at <= nowIso
+      && campaign.expires_at > nowIso
+      && campaign.game_id === d.game_id
+      && campaign.body === d.body
+      && !campaign.cancelled
+      && campaign.starts_at > nowIso;
+  }
   if (d.game_id) {
     const game = await db
       .prepare('SELECT sms_hold FROM games WHERE id=?')

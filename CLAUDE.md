@@ -21,6 +21,13 @@ them. The [October 26 $50 game](docs/campaigns/2026-10-26-special-game.md) must 
 held until Joseph confirms the campaign. Its invitation is only a draft; no SMS
 or payment-verification automation is authorized by scheduling it.
 
+**Scheduled invitations (ADR-0012):** apply migration 0013 before deploying the
+campaign-aware outbox. `sms_campaigns` stores exact text, game, send window,
+approval/cancellation and once-only recipient snapshot state. Only an explicitly
+approved `CAMPAIGN_INVITE` can bypass a game hold; automatic reminders stay held.
+The September 28 send time and proposed payment/refund policy are still awaiting
+Joseph's answer; use the dated campaign record for current approval state.
+
 **September 13, 2026 policy change:** [ADR-0009](docs/adr/0009-automatic-tournaments.md)
 is authoritative over older manual-tournament descriptions below. The user wants
 automatic quarterly off-week tournament scheduling, invitations, season closure,
