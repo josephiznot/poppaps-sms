@@ -1,4 +1,4 @@
-# CLAUDE.md — Poppa P's Poker Night SMS
+# AGENTS.md — Poppa P's Poker Night SMS
 
 ## Project overview
 
@@ -15,46 +15,11 @@ page**, all built for **minimal effort**.
 
 **September 27, 2026 one-off campaign hold:** [ADR-0011](docs/adr/0011-game-message-holds.md)
 adds `games.sms_hold`. Apply migration 0012 before deploying hold-aware code.
-Held games remain scheduled in admin, with custom details and a Texts on hold
+Held games stay scheduled in admin with their custom details and a Texts on hold
 label; public upcoming banners, reminder queues and game-linked dispatch exclude
-them. The [October 26 $50 game](docs/campaigns/2026-10-26-special-game.md) must stay
-held until Joseph confirms the campaign. Its invitation is only a draft; no SMS
-or payment-verification automation is authorized by scheduling it.
-
-**September 13, 2026 policy change:** [ADR-0009](docs/adr/0009-automatic-tournaments.md)
-is authoritative over older manual-tournament descriptions below. The user wants
-automatic quarterly off-week tournament scheduling, invitations, season closure,
-reminders and clear-cut replacements. Routine host work is entering game results;
-date conflicts, missing results, cutoff ties and uncertain texts are exceptions.
-Default tournament: first off-week Monday each quarter, 18:30 Central; qualification
-and invitations fourteen calendar days before at 10:00; initial invitees have
-seven calendar days to reply, until the regular-game night seven days before
-play at 21:00. Atomic
-persistent intent precedes provider sends; no blind retry
-of uncertain sends. Expired/replaced offers cannot reclaim seats. The system stays
-on Cloudflare/D1/Twilio and is completely separate from Skooped or other projects.
-The public footer credit has been removed. Do not load unrelated business records.
-Apply prerequisite migrations 0005 through 0010 in order before deploying. Deploy
-and verify the replacement-delivery bind-fix revision, then confirm no scheduled
-invocation that began before that deployment is still in progress before applying
-0011. Migration 0009 is an idempotent record of the already-applied 2026-Q4
-deadline correction; 0010 links the delivered host message to a real offer without
-resending it. Migration 0011 removes the exact three-offer 2026-Q4 replacement
-chain that never produced outbox rows; it queues and sends nothing, leaving a fixed
-hourly tick to restart with the first eligible replacement. Use Node 24+ for
-SQLite tests.
-Result edits preserve season attribution and use atomic, version-guarded replacement.
-Public profile IDs are stored random identifiers; always minimize public names.
-After STOP, START or UNSTOP restores consent without replacing a stored name or
-public profile ID. Ask for identity only when the member has no usable name;
-honor Twilio OptOutType and avoid duplicate provider lifecycle confirmations.
-A signed provider-standard START or UNSTOP (including an authoritative
-OptOutType START) also safely requeues that sender's still-current tournament
-invite when its only failed send was Twilio opt-out error 21610; the hourly
-outbox performs the later send after revalidating the active offer and game.
-One-time transition: schedule 2026-Q4 on September 28 so September 7 is the last
-scoring game of the current season; September 21 begins the next season. Resume
-the default quarterly occurrence rule in 2027.
+them. The [October 26 $50 game](docs/campaigns/2026-10-26-special-game.md) must remain
+held until Joseph confirms its campaign. The invitation is an unsent draft.
+This does not add payment verification or automatically reserve paid seats.
 
 - **Implemented on Cloudflare Workers + D1 + Cron** (Hono). One Worker serves
   `POST /sms` (Twilio webhook), `/admin/*` (host web app, password-gated), `GET /`
@@ -91,7 +56,7 @@ the default quarterly occurrence rule in 2027.
 
 ### Points rules (exact — top 5 only)
 
-Host enters the night's finishing order in the admin app; system awards: **1st = 5, 2nd = 4,
+Host texts the night's finishing order; system awards: **1st = 5, 2nd = 4,
 3rd = 3, 4th = 2, 5th = 1**. 6th and below score 0. The **finishing place is
 recorded for every game** (incl. tournaments, which store the place with 0
 points — ADR-0007); standings `SUM(points)` so tournament ranks never count.
@@ -100,41 +65,29 @@ tie at the 9:00 hard stop) — the post-game screen has an optional **Ties** row
 and the ledger already represents it as two rows at the same `place`/`points`,
 which standings `SUM` naturally (ADR-0002).
 
-### Automatic quarterly tournament (ADR-0009)
+### Quarterly "Special Players" tournament
 
-The hourly Worker schedules the first off-week Monday each quarter at 18:30
-Central. Invitations and qualification close happen fourteen days before at 10:00;
-initial replies are due on the regular-game night seven days before at 21:00. The host records results and
-changes dates only for conflicts. Missing results, insufficient standings, cutoff ties and
-uncertain delivery appear as exceptions in the admin Tournament page.
+Held **4× a year, host-initiated** — the host plans/schedules it manually; the
+system does **not** auto-schedule it (no cron for the tournament). The system only
+needs to **be aware**: on demand, when the host is planning a tournament, it
+surfaces the **top 8 players by points** (`SUM(points)` over the scoring window,
+in Central Time) so the host can invite them via targeted broadcast to a special
+game on an off week.
 
-The already-active 2026-Q4 plan was corrected before the September 21 cutoff from
-10:00 AM to 9:00 PM Central that day. The plan deadline moved with the remaining
-active offers; confirmed and retired offers, delivered message bodies, the frozen
-season snapshot and the schedule version did not change. The 9:00 PM cutoff is the
-recurring policy for later tournaments.
-
-The full board, qualifiers, season boundary, seat offers and unique outbound work
-are persisted atomically before sending. Opted-out qualifiers remain in historical
-records without being texted. Clear vacancies are filled from frozen standings;
-replacement ties need host selection. CALL confirms an active seat offer; FOLD
-releases it without unsubscribing. Expired or replaced invitations cannot reclaim
-seats. Reminder recipients are current offers only. Tournament reminder work
-reconciles per recipient on every due tick, so consent restored before play can
-queue the one missing reminder without duplicating recipients already queued or
-sent. STOP/HELP remain load-bearing.
-Per-recipient SID and status distinguish provider acceptance from delivery.
-Unknown transport outcomes never automatically retry.
-A signed provider-standard Twilio START or UNSTOP may recover only a definite
-no-SID 21610 failure for the sender's active tournament invitation;
-it queues the existing logical delivery for the hourly outbox and never sends
-from the webhook.
-The single designated host/dealer is always a player. The initial player offers are
-the ranked top eight plus the host only when the host is outside that selected eight.
-Every offer is CALL/FOLD-actionable and uses ordinary player copy; no duplicate dealer
-notice or reminder is created. An outside-top-eight host does not consume ranked
-capacity or enter replacement tie groups. The host offer survives the RSVP cutoff and
-SMS opt-out, while dispatch still requires current consent; FOLD can decline it.
+**Seat RSVPs (ADR-0006):** invitees reply **CALL** to lock their seat or **FOLD**
+to decline (poker-themed, advertised; IN/YES and OUT/NO/PASS also accepted).
+**FOLD frees the seat but never unsubscribes** (that's STOP); RSVP is
+last-action-wins. The invite carries a host-picked confirm-by **date** (calendar
+picker → formatted into the text, e.g. "Reply CALL by Sunday, June 21") — never
+enforced in code; sending is guarded by a confirmation prompt (the SMS send is
+the only irreversible step). The admin Tournament page tracks ✅/❌/⏳/🚫 per
+invitee and offers one-click backfill invites to the **next players on the closed
+season's board** (a ❌ declined seat is free to fill now; a ⏳ no-reply seat waits
+out the confirm-by date); the system never reassigns a seat on its own.
+Tournament-game reminders go to the **invited roster only**, never the whole list
+(`tournament_rsvps` table), and carry **distinct copy** (🏆 "Special Players
+tournament … Invitation-only, not a regular game night") so they never read like
+a regular game reminder.
 
 ## Interaction surfaces (ADR-0005)
 
@@ -158,17 +111,23 @@ SMS opt-out, while dispatch still requires current consent; FOLD can decline it.
   The homepage "Next game night" banner (JOIN nudge) always shows the next
   **regular** game; an upcoming Special Players tournament gets a separate
   **invitation-only notice** instead — never framed as the next open game
-  (ADR-0008). Ace-of-spades favicon (inline SVG in `lib/html.ts`). The site has no external business credit or integration.
+  (ADR-0008). Ace-of-spades favicon (inline SVG in `lib/html.ts`). Every page
+  carries a small "Built by Skooped" footer credit linking to skooped.io
+  (shared `layout()`).
 
 ## Roadmap / status
+
+0. **One-off campaign message holds** — explicit per-game hold; the calendar can
+   contain an event before its SMS campaign is approved. (ADR-0011.)
 
 1. **Game-night reminders** — ✅ built (Workers cron + Twilio).
 2. **Members + opt-in name capture** — ✅ built (JOIN → name reply → display name).
 3. **Points tracking** — ✅ built (admin post-game entry; append-only ledger;
    public standings). (ADR-0002, ADR-0005)
-4. **Special Players tournament** — ✅ built (admin: automatic quarterly calendar → frozen qualification → durable invites). (ADR-0002)
-   - **Seat RSVPs** — ✅ built (reply IN to confirm; admin tracker + automatic clear-cut next-in-line backfill; invitee-only tournament reminders). (ADR-0006)
-   - **Host/dealer player** — ✅ built (guaranteed actionable offer; extra offer outside the ranked eight). (ADR-0010)
+4. **Special Players tournament** — ✅ built (admin: top-8 → invite → logical
+   season reset). (ADR-0002)
+   - **Seat RSVPs** — ✅ built (reply IN to confirm; admin tracker + host-paced
+     next-in-line backfill; invitee-only tournament reminders). (ADR-0006)
 5. **Rewards / attendance** — ✅ mechanism built (host-marked attendance →
    data-driven promos via SMS); concrete reward rules still forming —
    `seed.sql` has a placeholder. (ADR-0004)
@@ -255,4 +214,3 @@ SMS admin *(superseded)*, `0004` rewards & attendance, `0005` interaction channe
 (IN confirm + host-paced backfill), `0007` tournament placements (ranks saved
 with 0 points; real champion on /seasons), `0008` public tournament visibility
 (invite-only notice, never "next game").
-`0009` defines automatic tournament operations; `0010` defines the designated host/dealer player policy.

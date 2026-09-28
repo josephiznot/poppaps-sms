@@ -132,13 +132,13 @@ export async function sendDueReminders(env: Env, now = new Date()): Promise<{ ga
     if (planId) {
       await env.DB
         .prepare(
-          `UPDATE games SET reminder_sent=1 WHERE id=? AND starts_at=?
+          `UPDATE games SET reminder_sent=1 WHERE id=? AND starts_at=? AND sms_hold=0
            AND EXISTS (SELECT 1 FROM tournament_plans WHERE id=? AND schedule_version=?)`,
         )
         .bind(game.id, game.starts_at, planId, scheduleVersion)
         .run();
     } else {
-      await env.DB.prepare('UPDATE games SET reminder_sent=1 WHERE id=? AND starts_at=?').bind(game.id, game.starts_at).run();
+      await env.DB.prepare('UPDATE games SET reminder_sent=1 WHERE id=? AND starts_at=? AND sms_hold=0').bind(game.id, game.starts_at).run();
     }
     console.log(JSON.stringify({ msg: 'reminders queued', gameId: game.id, tournament: !!game.is_tournament, queued: recipients.length }));
   }
@@ -151,7 +151,7 @@ export async function sendDueReminders(env: Env, now = new Date()): Promise<{ ga
     .prepare(
       `SELECT p.id AS plan_id,p.schedule_version,g.*
        FROM tournament_plans p JOIN games g ON g.id=p.game_id
-       WHERE p.status='ACTIVE' AND g.is_tournament=1 AND g.cancelled=0
+       WHERE p.status='ACTIVE' AND g.is_tournament=1 AND g.cancelled=0 AND g.sms_hold=0
          AND g.starts_at>=? AND g.starts_at<=?`,
     )
     .bind(now.toISOString(), cutoff.toISOString())

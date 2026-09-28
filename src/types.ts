@@ -48,6 +48,8 @@ export interface Game {
   description: string | null;
   buy_in: string | null;
   reminder_sent: number;
+  /** 1 blocks game-linked SMS dispatch and automatic reminder queuing. */
+  sms_hold?: number;
   cancelled: number;
   series_date: string | null;
   created_at: string;

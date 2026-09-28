@@ -91,16 +91,16 @@ export async function listMembers(db: D1Database): Promise<Member[]> {
 
 export async function createGame(
   db: D1Database,
-  g: { starts_at: string; location: string; is_tournament: boolean; description?: string; buy_in?: string },
+  g: { starts_at: string; location: string; is_tournament: boolean; description?: string; buy_in?: string; sms_hold?: boolean },
   now: string,
 ): Promise<string> {
   const id = uid();
   await db
     .prepare(
-      `INSERT INTO games (id, starts_at, location, is_tournament, description, buy_in, reminder_sent, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, 0, ?)`,
+      `INSERT INTO games (id, starts_at, location, is_tournament, description, buy_in, reminder_sent, sms_hold, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`,
     )
-    .bind(id, g.starts_at, g.location, g.is_tournament ? 1 : 0, g.description ?? null, g.buy_in ?? null, now)
+    .bind(id, g.starts_at, g.location, g.is_tournament ? 1 : 0, g.description ?? null, g.buy_in ?? null, g.sms_hold ? 1 : 0, now)
     .run();
   return id;
 }
@@ -123,7 +123,7 @@ export async function listGames(db: D1Database): Promise<Game[]> {
 export async function nextUpcomingGame(db: D1Database, nowIso: string, regularOnly = false): Promise<Game | null> {
   return db
     .prepare(
-      `SELECT * FROM games WHERE cancelled=0 AND starts_at > ?${regularOnly ? ' AND is_tournament=0' : ''}
+      `SELECT * FROM games WHERE cancelled=0 AND sms_hold=0 AND starts_at > ?${regularOnly ? ' AND is_tournament=0' : ''}
        ORDER BY starts_at ASC LIMIT 1`,
     )
     .bind(nowIso)
@@ -132,7 +132,7 @@ export async function nextUpcomingGame(db: D1Database, nowIso: string, regularOn
 
 export async function gamesDueForReminder(db: D1Database, nowIso: string, cutoffIso: string): Promise<Game[]> {
   const r = await db
-    .prepare('SELECT * FROM games WHERE reminder_sent=0 AND cancelled=0 AND starts_at >= ? AND starts_at <= ?')
+    .prepare('SELECT * FROM games WHERE reminder_sent=0 AND sms_hold=0 AND cancelled=0 AND starts_at >= ? AND starts_at <= ?')
     .bind(nowIso, cutoffIso)
     .all<Game>();
   return r.results ?? [];

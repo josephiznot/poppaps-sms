@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS games (
   description   TEXT,
   buy_in        TEXT,
   reminder_sent INTEGER NOT NULL DEFAULT 0,
+  sms_hold      INTEGER NOT NULL DEFAULT 0 CHECK (sms_hold IN (0,1)),
   cancelled     INTEGER NOT NULL DEFAULT 0,
   series_date   TEXT,                    -- local date key for auto-scheduled games (NULL = one-off)
   created_at    TEXT NOT NULL,

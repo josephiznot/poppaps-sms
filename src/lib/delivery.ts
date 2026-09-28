@@ -172,6 +172,13 @@ export async function deliveryIsStillValid(db: D1Database, d: DeliveryRow, nowIs
   if (!member) return false;
 
   if (d.expires_at && d.expires_at <= nowIso) return false;
+  if (d.game_id) {
+    const game = await db
+      .prepare('SELECT sms_hold FROM games WHERE id=?')
+      .bind(d.game_id)
+      .first<{ sms_hold: number }>();
+    if (game?.sms_hold) return false;
+  }
   if (d.kind === 'PROMO') return true;
 
   if (d.kind === 'REGULAR_REMINDER') {

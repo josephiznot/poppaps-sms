@@ -71,6 +71,10 @@ admin.get('/games', async (c) => {
             : g.is_tournament
               ? ' <span class="pill">🏆</span>'
               : '';
+          const hold = g.sms_hold ? ' <span class="pill warn">Texts on hold</span>' : '';
+          const heldDetails = g.sms_hold
+            ? `<br><span class="muted" style="overflow-wrap:anywhere">${g.description ? `🃏 ${esc(g.description)}` : 'Custom game'}${g.buy_in ? ` · 🚬 ${esc(g.buy_in)}` : ''}</span>`
+            : '';
           const managed = planByGame.has(g.id);
           const primary = g.cancelled
             ? `<span class="muted">—</span>`
@@ -88,7 +92,7 @@ admin.get('/games', async (c) => {
             `<details class="menu"><summary aria-label="More actions">⋯</summary>` +
             `<div class="menu-body">${managed ? '<a href="/admin/tournament">Change date or cancel</a>' : skip+del}</div></details>`;
           return (
-            `<tr><td>${esc(formatDateOnly(g.starts_at, c.env.TIMEZONE))}${tag}</td>` +
+            `<tr><td>${esc(formatDateOnly(g.starts_at, c.env.TIMEZONE))}${tag}${hold}${heldDetails}</td>` +
             `<td>${primary} ${menu}</td></tr>`
           );
         })

@@ -131,6 +131,12 @@ Real SMS sending still needs valid Twilio creds in `.dev.vars`; everything else
 
 ## Day-to-day
 
+- **One-off campaigns awaiting approval**: save the game with `sms_hold=1`.
+  Admin shows **Texts on hold** with its custom details; public upcoming banners
+  and automatic reminder queues omit it. The outbox rechecks the hold before
+  sending game-linked work. Keep the invitation in `docs/campaigns/` until Joseph
+  confirms the campaign. There is no automatic payment verification or release
+  button. [ADR-0011](docs/adr/0011-game-message-holds.md) records this boundary.
 - **Record results** after each game. Choose finishers and attendance. Results save atomically; editing an old game preserves its season. Tournament results award zero season points.
 - **Tournament dates appear automatically**: first off-week Monday each quarter, 6:30 PM Central. Invitations and qualification close are fourteen days before play at 10:00 AM Central. Initial ranked replies are due at 9:00 PM on the regular-game night seven days before play; replacements get 24 hours, capped at 24 hours before play.
 - **2026 transition**: the next tournament is September 28. Qualification closes September 14, making September 7 the final scoring game of the current season; September 21 begins the next season. Normal quarterly scheduling resumes in 2027.
@@ -141,6 +147,11 @@ Real SMS sending still needs valid Twilio creds in `.dev.vars`; everything else
 - **Returning players**: after STOP, text START or UNSTOP. The saved player name, standings history and profile ID are retained, so onboarding is not repeated.
 
 ## Upgrading to automatic tournaments
+
+For the game-message hold feature, apply `node node_modules/wrangler/bin/wrangler.js d1 execute poker-sms --remote --file=migrations/0012_game_sms_hold.sql`
+once before deploying the hold-aware Worker. This additive migration defaults
+existing games to unheld and queues/sends nothing. Verify the deployed revision
+before creating a held one-off event; use `--local` for an existing local database.
 
 Read [ADR-0009](docs/adr/0009-automatic-tournaments.md) and [ADR-0010](docs/adr/0010-designated-tournament-dealer.md). Apply prerequisite migrations **0005 through 0010 in order** before deploying this revision. Deploy and verify the replacement-delivery bind fix before applying repair migration 0011. Do not run the fresh schema against a legacy database as a substitute for migrations.
 

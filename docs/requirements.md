@@ -101,6 +101,13 @@ regress.
 - FR-R4. **SMS carries no admin commands.** Inbound is only the player intents
   above, the JOIN name-capture reply (FR-M2), and the tournament-seat
   confirmation `IN` (FR-T8). (ADR-0005 supersedes ADR-0003.)
+- FR-R5. **Per-game message hold:** `games.sms_hold=1` keeps a one-off game
+  scheduled while its campaign awaits approval. Both reminder queue paths skip
+  held games, and outbound delivery rechecks the hold for game-linked messages.
+  Admin labels the hold and shows the custom buy-in/description; public upcoming
+  banners omit held games. A draft invitation is stored separately from the
+  outbox. Releasing a hold or sending its campaign requires explicit confirmation;
+  neither scheduling nor a player's reply verifies payment. (ADR-0011.)
 
 ### 2.2 Membership & opt-in
 - FR-M1. **Members are keyed by phone**; one entity (Subscriber + Player collapsed,
