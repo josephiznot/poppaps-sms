@@ -17,16 +17,17 @@ page**, all built for **minimal effort**.
 adds `games.sms_hold`. Apply migration 0012 before deploying hold-aware code.
 Held games remain scheduled in admin, with custom details and a Texts on hold
 label; public upcoming banners, reminder queues and game-linked dispatch exclude
-them. The [October 26 $50 game](docs/campaigns/2026-10-26-special-game.md) must stay
-held until Joseph confirms the campaign. Its invitation is only a draft; no SMS
-or payment-verification automation is authorized by scheduling it.
+them. The [October 26 $50 game](docs/campaigns/2026-10-26-special-game.md) keeps
+its automatic reminder hold. Joseph approved the reviewed invitation on October 5
+for all opted-in players at 9:00 PM Central that evening. The dated campaign
+record holds its exact copy and delivery state. No payment verification is added.
 
 **Scheduled invitations (ADR-0012):** apply migration 0013 before deploying the
 campaign-aware outbox. `sms_campaigns` stores exact text, game, send window,
 approval/cancellation and once-only recipient snapshot state. Only an explicitly
 approved `CAMPAIGN_INVITE` can bypass a game hold; automatic reminders stay held.
-The September 28 send time and proposed payment/refund policy are still awaiting
-Joseph's answer; use the dated campaign record for current approval state.
+The October 5 invitation approval includes the reviewed October 19 deadline and
+low-turnout refund choice; use the dated campaign record for current state.
 
 **September 13, 2026 policy change:** [ADR-0009](docs/adr/0009-automatic-tournaments.md)
 is authoritative over older manual-tournament descriptions below. The user wants

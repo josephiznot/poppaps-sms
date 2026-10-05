@@ -35,10 +35,11 @@ receipts, suppression after expiry and no blind retry of UNKNOWN sends. Campaign
 approval/queuing is not proof of delivery. Cancellation suppresses remaining work;
 it cannot recall messages already submitted to the provider.
 
-Campaigns must have an explicit expiry. For the proposed September 28 morning
-invitation, use a two-hour send window so a missed tick or definite transient
-failure can retry once without sending an invitation that evening. The final
-time and refund wording remain pending Joseph's answers in the dated
+Campaigns must have an explicit expiry. Use a two-hour send window so a missed
+tick or definite transient failure can retry once without sending indefinitely.
+Joseph's October 5 instruction replaced the unapproved September 28 proposal
+with a 9:00–11:00 PM Central window that evening. Exact approved copy, scheduling
+and delivery evidence live in the dated
 [campaign record](../campaigns/2026-10-26-special-game.md).
 
 ## Scope and rollout

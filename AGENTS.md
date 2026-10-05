@@ -17,17 +17,19 @@ page**, all built for **minimal effort**.
 adds `games.sms_hold`. Apply migration 0012 before deploying hold-aware code.
 Held games stay scheduled in admin with their custom details and a Texts on hold
 label; public upcoming banners, reminder queues and game-linked dispatch exclude
-them. The [October 26 $50 game](docs/campaigns/2026-10-26-special-game.md) must remain
-held until Joseph confirms its campaign. The invitation is an unsent draft.
+them. The [October 26 $50 game](docs/campaigns/2026-10-26-special-game.md) retains
+its automatic reminder hold. Joseph approved its reviewed invitation on October 5
+for all opted-in players at 9:00 PM Central that evening; see the dated campaign
+record for the exact message, schedule and delivery state.
 This does not add payment verification or automatically reserve paid seats.
 
 **Scheduled invitation campaigns (ADR-0012):** migration 0013 adds explicitly
 approved, timed `sms_campaigns`. The hourly job snapshots all subscribed players
 once and the outbox rechecks approval, exact copy, game, timing and consent.
 Only a valid campaign invitation can bypass a game hold; regular reminders stay
-held. The September 28 send time and October 19/refund terms are still proposals
-until Joseph confirms them in the dated campaign record. No campaign has been
-approved merely by adding this capability.
+held. The reviewed October 19 deadline and low-turnout refund choice are included
+in the October 5 approved invitation. Adding this capability alone never approves
+a campaign; approval and delivery state live in the dated campaign record.
 
 - **Implemented on Cloudflare Workers + D1 + Cron** (Hono). One Worker serves
   `POST /sms` (Twilio webhook), `/admin/*` (host web app, password-gated), `GET /`
