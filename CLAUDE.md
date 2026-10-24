@@ -90,8 +90,10 @@ the default quarterly occurrence rule in 2027.
   `gameId`, `points`, `place`, `awardedAt`). Never mutated; corrections are new
   rows. `place` = finishing rank 1..5; **tournament rows store `place` with
   `points = 0`** so ranks are kept while standings stay untouched (ADR-0007).
-- **Attendance** — append-only, **host-marked** on the post-game admin screen
-  (`memberPhone`, `gameId`, `timestamp`). No player self-check-in.
+- **Attendance** — **host-marked** on the game admin screen, before or after
+  play (`memberPhone`, `gameId`, `timestamp`). Save attendance independently;
+  finishers and game completion are recorded separately (ADR-0013). No player
+  self-check-in.
 - **Seasons** — append-only season-close log (`closedAt`, top-8 `snapshot`);
   current season = after `MAX(closedAt)`. "Reset" is this boundary, not a delete.
 - **RewardRules** + **AwardedRewards** — attendance-based promos; earned + redeemed
@@ -151,7 +153,8 @@ SMS opt-out, while dispatch still requires current consent; FOLD can decline it.
   confirm, ADR-0006). **No admin over SMS.**
 - **Admin = web app** on the same Worker, **password-gated** (`ADMIN_PASSWORD`;
   Cloudflare Access optional in prod): schedule games (one per day; Skip or Delete
-  — delete also removes that game's points + attendance), post-game (winners +
+  — delete also removes that game's points + attendance), game attendance
+  (save as players arrive, including before start), post-game (winners +
   attendance; re-openable to edit a past game), standings, run-tournament, roster
   (names, games-attended counts, promos). Replaces the old SMS
   command router + phone-allowlist (ADR-0003, superseded).
@@ -179,7 +182,8 @@ SMS opt-out, while dispatch still requires current consent; FOLD can decline it.
    - **Host/dealer player** — ✅ built (guaranteed actionable offer; extra offer outside the ranked eight). (ADR-0010)
 5. **Rewards / attendance** — ✅ mechanism built (host-marked attendance →
    data-driven promos via SMS); concrete reward rules still forming —
-   `seed.sql` has a placeholder. (ADR-0004)
+   `seed.sql` has a placeholder. Attendance can be saved before play without
+   finishers; rewards are evaluated when results are saved. (ADR-0004, ADR-0013)
 6. **Recurring schedule** — ✅ built. A biweekly rule (`src/lib/schedule.ts`:
    anchor + 14-day interval, fixed time/place/buy-in) is materialized by the cron;
    the host can Skip/Cancel any occurrence (row kept → not regenerated).

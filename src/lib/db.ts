@@ -270,6 +270,39 @@ export async function attendeesForGame(db: D1Database, gameId: string): Promise<
   return (r.results ?? []).map((x) => x.member_phone);
 }
 
+/** Save attendance independently, retaining recorded finishers and result metadata.
+ * Share the result version so attendance and result forms cannot overwrite a
+ * newer save. Use game time for season attribution, including early check-in. */
+export async function replaceGameAttendance(
+  db: D1Database, gameId: string, expectedVersion: number, attendees: string[],
+): Promise<void> {
+  const game = await getGame(db, gameId);
+  if (!game || game.cancelled) throw new Error('This game is missing or cancelled.');
+  if (!Number.isInteger(expectedVersion) || expectedVersion < 0) throw new Error('Invalid result version.');
+  const finishers = await pointsForGame(db, gameId);
+  const people = new Set([...attendees, ...finishers.map(p => p.member_phone)]);
+  for (const phone of people) if (!await getMember(db, phone)) throw new Error('A selected player is no longer on the roster.');
+  const earliest = await db.prepare('SELECT MIN(awarded_at) AS at FROM points_ledger WHERE game_id=?')
+    .bind(gameId).first<{at: string | null}>();
+  const effective = game.scoring_at ?? earliest?.at ?? game.starts_at;
+  const statements = [
+    // Abort the entire batch if a concurrent deletion removed the game.
+    db.prepare(`INSERT INTO games(id,starts_at,location,created_at)
+      SELECT ?,NULL,'','' WHERE NOT EXISTS (SELECT 1 FROM games WHERE id=?)`).bind(gameId,gameId),
+    db.prepare(`UPDATE games SET result_version=CASE WHEN result_version=? AND cancelled=0 THEN result_version+1 ELSE NULL END
+      WHERE id=?`).bind(expectedVersion,gameId),
+    db.prepare('DELETE FROM attendance WHERE game_id=?').bind(gameId),
+    ...[...people].map(phone => db.prepare(
+      'INSERT INTO attendance(id,member_phone,game_id,created_at) VALUES(?,?,?,?)')
+      .bind(uid(),phone,gameId,effective)),
+  ];
+  try { await db.batch(statements); }
+  catch (error) {
+    if (String(error).includes('result_version')) throw new Error('This game changed in another window. Reload the game before saving again.');
+    throw error;
+  }
+}
+
 /**
  * Chronological attendance + scoring history over regular (non-tournament,
  * non-cancelled) games — feeds the public badge computation (lib/badges.ts).

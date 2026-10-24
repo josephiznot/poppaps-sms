@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createTestDb } from './d1-fixture';
-import { replaceGameResult, standings, champions } from '../src/lib/db';
+import { replaceGameAttendance, replaceGameResult, standings, champions } from '../src/lib/db';
 
 function setup() {
   const { db, sqlite } = createTestDb();
@@ -9,6 +9,31 @@ function setup() {
   return { db, sqlite };
 }
 describe('real database result corrections', () => {
+  it('edits attendance without changing recorded points, game type or scoring timestamps',async()=>{
+    const {db,sqlite}=setup();
+    await replaceGameResult(db,'g',0,[{phone:'A',place:1}],[],true,'2026-06-02');
+    const points=sqlite.prepare('SELECT * FROM points_ledger').all();
+    const metadata=sqlite.prepare('SELECT scoring_at,results_recorded_at,is_tournament FROM games').get();
+    await replaceGameAttendance(db,'g',1,['B']);
+    expect(sqlite.prepare('SELECT * FROM points_ledger').all()).toEqual(points);
+    expect(sqlite.prepare('SELECT scoring_at,results_recorded_at,is_tournament FROM games').get()).toEqual(metadata);
+    expect(sqlite.prepare('SELECT member_phone FROM attendance ORDER BY member_phone').all())
+      .toEqual([{member_phone:'A'},{member_phone:'B'}]);
+    await expect(replaceGameResult(db,'g',1,[{phone:'B',place:1}],[],true,'2026-06-03')).rejects.toThrow('another window');
+    expect(sqlite.prepare('SELECT * FROM points_ledger').all()).toEqual(points);
+  });
+
+  it('cannot leave orphan attendance if the game is deleted while saving',async()=>{
+    const {db,sqlite}=setup();
+    const originalBatch=db.batch.bind(db);
+    db.batch=async statements=>{
+      sqlite.exec("DELETE FROM games WHERE id='g'");
+      return originalBatch(statements);
+    };
+    await expect(replaceGameAttendance(db,'g',0,['A'])).rejects.toThrow();
+    expect(sqlite.prepare('SELECT COUNT(*) AS n FROM attendance').get()?.n).toBe(0);
+  });
+
   it('keeps backfills and unchanged edits in the historical season', async () => {
     const {db,sqlite} = setup();
     sqlite.exec(`INSERT INTO seasons VALUES('s','2026-07-01T00:00:00.000Z','{}')`);

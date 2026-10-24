@@ -164,12 +164,19 @@ regress.
   still requires current subscription, and explicit FOLD may decline the offer.
 
 ### 2.5 Attendance & rewards
-- FR-W1. **Attendance is host-marked** on the post-game screen (tap who attended),
-  one append-only Attendance row per member per game. **No player self-check-in.**
+- FR-W1. **Attendance is host-marked** on the game screen (tap who attended),
+  before or after the scheduled start. **Save attendance** independently of
+  finishers, with one Attendance row per member per game. Reopening pre-fills the
+  saved selection; corrections replace that game's attendance atomically with a
+  shared result-version guard. Recorded finishers always count as attended.
+  Attendance alone leaves points, game type, scoring time and result completion
+  untouched and sends no SMS. Attendance uses the game's effective scoring time
+  for season attribution, including when saved early. **No player self-check-in.**
 - FR-W2. Reward rules are **data-driven** (`RewardRules`: e.g. `everyNVisits`,
   `rewardText`, `active`) evaluated against the attendance ledger.
 - FR-W3. When a rule fires, the member is **texted the promo** and an
   `AwardedRewards` row records it (so it fires once per threshold crossing).
+  Evaluation remains tied to **Save results**, not attendance-only saves.
 - FR-W4. The admin Roster shows earned promos with a **"redeemed" checkbox** the
   host taps when honored in person. No POS; `AwardedRewards` is the system of record.
 - FR-W5. The concrete reward rule set (the values of X, the promos) is **not yet
@@ -182,8 +189,12 @@ regress.
   (manual create + the recurring generator both skip a date that's taken). A game
   can be **Skipped** (kept, won't regenerate) or **Deleted** (also removes its
   points + attendance).
-- FR-AD2. **Post-game** — for a game: tap attendance (FR-W1) and tap/order the top
-  5 (FR-P2), committed together. An optional **Ties** row lets two players share a
+- FR-AD2. **Game attendance and post-game results** — save attendance (FR-W1) as
+  players arrive, without needing a finishing place or waiting for the start time
+  (ADR-0013). Upcoming games link to **Attendance**; finishing-place controls appear
+  once the game starts, and the result endpoint still rejects early results.
+  After play, tap/order the top 5 (FR-P2); **Save results** commits finishers and
+  the attendance selection together. An optional **Ties** row lets two players share a
   place (FR-P2). Re-opening a recorded game **pre-fills** it (ties included);
   re-saving **replaces** that game's result (edit/correct — ADR-0002 scoped exception).
 - FR-AD3. **Standings** — current season.

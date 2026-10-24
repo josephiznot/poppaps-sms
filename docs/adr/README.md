@@ -22,6 +22,9 @@ Consequences,** and a **"Revisit if / Future revisions"** section.
 | [0008](0008-public-tournament-visibility.md) | Upcoming tournament shown as an invite-only notice, never as "next game" | Accepted (implemented) |
 | [0009](0009-automatic-tournaments.md) | Automatic quarterly tournament operations | Accepted (implemented) |
 | [0010](0010-designated-tournament-dealer.md) | Designated host/dealer is a tournament player | Accepted (implemented) |
+| [0011](0011-game-message-holds.md) | One-off game message holds | Accepted (implemented) |
+| [0012](0012-scheduled-invitation-campaigns.md) | Scheduled invitation campaigns | Accepted (implemented) |
+| [0013](0013-early-game-attendance.md) | Save attendance before game time | Accepted (implemented) |
 
 ## Context at a glance
 

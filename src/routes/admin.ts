@@ -78,7 +78,7 @@ admin.get('/games', async (c) => {
           const managed = planByGame.has(g.id);
           const primary = g.cancelled
             ? `<span class="muted">—</span>`
-            : `<a href="/admin/games/${esc(g.id)}">${g.results_recorded_at ? 'Edit results' : g.starts_at < now ? 'Record results' : 'Results'} →</a>${managed ? ' · <a href="/admin/tournament">Tournament settings</a>' : ''}`;
+            : `<a href="/admin/games/${esc(g.id)}">${g.results_recorded_at ? 'Edit results' : g.starts_at <= now ? 'Record results' : 'Attendance'} →</a>${managed ? ' · <a href="/admin/tournament">Tournament settings</a>' : ''}`;
           const skip =
             !g.cancelled && g.starts_at > now
               ? `<form method="post" action="/admin/games/${esc(g.id)}/cancel">` +
@@ -116,7 +116,7 @@ admin.get('/games', async (c) => {
     c.req.query('err') === 'dup'
       ? `<p class="warn">⚠️ A game already exists on that date — only one game per day. Delete the existing one if you need to replace it.</p>`
       : '';
-  return layout('Games', `<h1>Games</h1><p>Regular nights and quarterly tournaments schedule themselves. Record results after each game; <a href="/admin/tournament">change a tournament date or check exceptions</a>.</p>${dup}${list}${form}`, adminNav);
+  return layout('Games', `<h1>Games</h1><p>Regular nights and quarterly tournaments schedule themselves. Save attendance as players arrive, then record results after each game; <a href="/admin/tournament">change a tournament date or check exceptions</a>.</p>${dup}${list}${form}`, adminNav);
 });
 
 admin.post('/games', async (c) => {
@@ -159,12 +159,13 @@ admin.post('/games/:id/delete', async (c) => {
   return c.redirect('/admin/games');
 });
 
-// ---- post-game: attendance + winners --------------------------------------
+// ---- game attendance + post-game winners ---------------------------------
 
 admin.get('/games/:id', async (c) => {
   const game = await db.getGame(c.env.DB, c.req.param('id'));
   if (!game) return layout('Not found', `<p>Game not found.</p>`, adminNav);
 
+  const hasStarted = game.starts_at <= new Date().toISOString();
   const when = esc(formatWhen(game.starts_at, c.env.TIMEZONE));
   const members = await db.listMembers(c.env.DB);
   if (members.length === 0) {
@@ -214,23 +215,43 @@ admin.get('/games/:id', async (c) => {
     )
     .join('');
 
-  const title = editing ? 'Edit results' : 'Post-game';
+  const title = !hasStarted ? 'Attendance' : editing ? 'Edit results' : 'Attendance & results';
   const note = editing
-    ? `<p class="muted">Re-saving <strong>replaces</strong> this game's recorded result (winners + attendance).</p>`
+    ? `<p class="muted">Save results <strong>replaces</strong> this game's winners and attendance. Save attendance updates attendance only.</p>`
+    : '';
+  const saved = c.req.query('saved') === 'attendance'
+    ? `<p>Attendance saved.</p>`
     : '';
   const body =
-    `<h1>${title} — ${when}</h1>${note}` +
-    `<form class="stack" method="post" action="/admin/games/${esc(game.id)}/result">` +
+    `<h1>${title} — ${when}</h1>${saved}${note}` +
+    `<form class="stack" method="post" action="/admin/games/${esc(game.id)}/${hasStarted ? 'result' : 'attendance'}">` +
     `<input type="hidden" name="result_version" value="${game.result_version ?? 0}">` +
-    `<h2>Top 5 ${game.is_tournament ? '(no season points)' : '(5·4·3·2·1 pts)'}</h2>${winnerSelects}` +
+    `<h2>Who attended?</h2><p class="muted">Save attendance as players arrive. Recorded winners count automatically.</p>${attendanceRows}` +
+    `<button class="primary" type="submit" formaction="/admin/games/${esc(game.id)}/attendance">Save attendance</button>` +
+    (hasStarted ? `<h2>Top 5 ${game.is_tournament ? '(no season points)' : '(5·4·3·2·1 pts)'}</h2>${winnerSelects}` +
     `<h2>Ties <span class="muted">(rare)</span></h2>` +
     `<p class="muted">Only if two players truly tied for a place — e.g. a chip-count tie at the 9:00 stop. ` +
     `Pick the place and the extra player who shares it; they get that place's points too. Leave blank otherwise.</p>${tieRowsHtml}` +
-    `<h2>Who attended?</h2><p class="muted">Winners count automatically.</p>${attendanceRows}` +
     `<label class="row"><input type="checkbox" name="is_tournament" value="1"${game.is_tournament ? ' checked' : ''}> 🏆 Special Players tournament <span class="muted">(no season points)</span></label>` +
-    `<button class="primary" type="submit">Save results</button></form>`;
+    `<button class="primary" type="submit">Save results</button>`
+    : `<p class="muted">Add finishing places after the game starts. Saving attendance does not record results.</p>`) +
+    `</form>`;
 
   return layout(title, body, adminNav);
+});
+
+admin.post('/games/:id/attendance', async (c) => {
+  const game = await db.getGame(c.env.DB, c.req.param('id'));
+  if (!game) return c.redirect('/admin/games');
+  const f = new URLSearchParams(await c.req.text());
+  try {
+    if (!f.has('result_version')) throw new Error('Reload this game to get its current result version.');
+    await db.replaceGameAttendance(c.env.DB,game.id,Number(f.get('result_version')),f.getAll('attend'));
+  } catch (error) {
+    const response = layout('Attendance not saved',`<h1>Attendance not saved</h1><p class="warn">${esc(String(error instanceof Error ? error.message : error))}</p><p><a href="/admin/games/${esc(game.id)}">Reload this game →</a></p>`,adminNav);
+    return new Response(response.body,{status:409,headers:response.headers});
+  }
+  return c.redirect(`/admin/games/${encodeURIComponent(game.id)}?saved=attendance`,303);
 });
 
 admin.post('/games/:id/result', async (c) => {

@@ -144,7 +144,8 @@ Real SMS sending still needs valid Twilio creds in `.dev.vars`; everything else
   can send while automatic game reminders stay held. There is no campaign editor;
   scheduling is an explicit operational database write. Record approval and the
   campaign identifier in `docs/campaigns/`. [ADR-0012](docs/adr/0012-scheduled-invitation-campaigns.md).
-- **Record results** after each game. Choose finishers and attendance. Results save atomically; editing an old game preserves its season. Tournament results award zero season points.
+- **Record attendance as players arrive**: open the game (upcoming games show **Attendance**), check the players and tap **Save attendance**. This works before the scheduled start and retains the selection for later. It records no points or completed results and sends no texts.
+- **Record results** after each game. Reopen the game, choose finishers and review the saved attendance, then tap **Save results**. Results save atomically; editing an old game preserves its season. Tournament results award zero season points. Attendance rewards are evaluated when results are saved.
 - **Tournament dates appear automatically**: first off-week Monday each quarter, 6:30 PM Central. Invitations and qualification close are fourteen days before play at 10:00 AM Central. Initial ranked replies are due at 9:00 PM on the regular-game night seven days before play; replacements get 24 hours, capped at 24 hours before play.
 - **2026 transition**: the next tournament is September 28. Qualification closes September 14, making September 7 the final scoring game of the current season; September 21 begins the next season. Normal quarterly scheduling resumes in 2027.
 - **No routine tournament button.** The hourly job freezes eight qualifiers, closes the scoring season, queues invitations and fills clear-cut vacancies. STOP is authoritative; FOLD declines only the seat. Expired/replaced offers cannot reclaim a seat.
